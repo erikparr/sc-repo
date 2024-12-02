@@ -1,5 +1,6 @@
 
-(
+( 
+    //ok
 ~pseq = Pbind(
     \type, \vst_midi,
     \vst, ~vsti,

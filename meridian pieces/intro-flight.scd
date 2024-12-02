@@ -19,7 +19,6 @@
 ~f2.free;
 )
 
-
 /* ACCENDING ARPEGGIA */
 (
 ~bpm = 298;
@@ -54,12 +53,15 @@
 	var chordIndex = 0;
 	var arpegIndex = 0;
 	var startTime = Main.elapsedTime;
+
+
+
 	~stop = false;
 	0.25.wait;
 	// Synth(\MacroCtrl1, [ \gate, 1, \start, ctrlLow1, \end, ctrlHi1, \dur, duration ]);
 	loop({
 		var now = Main.elapsedTime - startTime;
-		var bpm = ~knob1Val.linlin(0, 127, 200, 800); // + bpmOffset.at(now);
+		var bpm = ~midiController.getKnob(16).value.linlin(0, 127, 200, 800); // + bpmOffset.at(now);
 		ts.setBPM(bpm);
 		// (bpm).postln;
 		waittime = ts.getBeatDuration;
@@ -157,12 +159,12 @@
 	// Synth(\MacroCtrl1, [ \gate, 1, \start, ctrlLow1, \end, ctrlHi1, \dur, duration ]);
 	loop({
 		var now = Main.elapsedTime - startTime;
-		var bpm = ~knob1Val.linlin(0, 127, 60, 400); // + bpmOffset.at(now);
+		var bpm = ~midiController.sliderValues[0].linlin(0, 127, 60, 400); // + bpmOffset.at(now);
 		ts.setBPM(bpm);
 		// (bpm).postln;
-		waittime = 	~knob5Val.linlin(0, 127, 0.01, 1.0);
+		waittime = ~midiController.sliderValues[1].linlin(0, 127, 0.01, 1.0);
 		currentNotes.do { |note, index|
-			~vstList.do { |item, i| item.midi.noteOn(0, note, ~knob2Val); };
+			~vstList.do { |item, i| item.midi.noteOn(0, note,  ~midiController.sliderValues[2].linlin(0,127,0,100))};
 			note.post; " ".post;
 		};
 		"".postln;
@@ -178,7 +180,7 @@
 
 
 
-		postf(" waiting %\n ", waittime);
+		postf(" waiting %\n ", 	waittime);
 		waittime.wait;
 		currentNotes.do { |note, index|
 			~vstList.do { |item, i| item.midi.noteOff(0, note, 0); };
