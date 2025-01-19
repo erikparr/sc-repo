@@ -1,4 +1,11 @@
+//note: using settings from chord-bend-multi project dir
+
 (PathName(thisProcess.nowExecutingPath).pathOnly ++ "setup/_setup-loader.scd").load;
+
+41,46,49,53,54,58,60
+46,54,61,65,66,70
+
+
 
 /* MELODIC PART 2 with Individual Note Playback */
 (
@@ -14,37 +21,40 @@
 ~melodyDict.put(\set1, (
     name: "First Set",
     patterns: [
-        [51, 58, 53],
+        [70,70,72,73,72,70],
+		// [41,46,49,53,54,58,60,58,54,53,49,46,41],
     ],
     trillMode: (
-        enabled: true,
+        enabled: false,
         index: 0
     )
 ));
 ~melodyDict.put(\set2, (
     name: "Second Set",
     patterns: [
-        [61, 53, 54 ],
+        [65,65, 66, 73, 66,65]
+		// [42, 46, 51, 53, 54, 58, 61, 58, 54, 53, 51, 46, 42]
     ],
     trillMode: (
-        enabled: true,
-        index: 1
+        enabled: false,
+        index: 0
     )
 ));
 ~melodyDict.put(\set3, (
     name: "Third Set",
     patterns: [
-        [61, 58, 54],
-    ],
+        [63,63,66,73,66,63]
+//        [46,54,61,65,66,70,66,65,61,54,46]
+            ],
     trillMode: (
         enabled: false,
-        index: nil
+        index: 0
     )
 ));
 ~melodyDict.put(\set4, (
     name: "Fourth Set",
     patterns: [
-        [61, 57, 52],
+        [58,58,65,66,65]
     ],
     trillMode: (
         enabled: false,
@@ -54,7 +64,7 @@
 ~melodyDict.put(\set5, (
     name: "Fifth Set",
     patterns: [
-        [58, 53, 51],
+        [58,58,63,66,66,63]
     ],
     trillMode: (
         enabled: false,
@@ -64,27 +74,90 @@
 ~melodyDict.put(\set6, (
     name: "Sixth Set",
     patterns: [
-        [58, 54, 49],
+        [53,53,58,63,63,58]
     ],
     trillMode: (
         enabled: false,
         index: nil
     )
 ));
+// ~melodyDict.put(\set1, (
+// 	name: "First Set",
+// 	patterns: [
+// 		[39,46,49,53,54,58,60,58,54,53,49,46,41],
+// 		// [41,46,49,53,54,58,60,58,54,53,49,46,41],
+// 	],
+// 	trillMode: (
+// 		enabled: false,
+// 		index: 0
+// 	)
+// ));
+// ~melodyDict.put(\set2, (
+// 	name: "Second Set",
+// 	patterns: [
+// 		[39, 46, 51, 53, 54, 58, 61, 58, 54, 53, 51, 46, 42]
+// 		// [42, 46, 51, 53, 54, 58, 61, 58, 54, 53, 51, 46, 42]
+// 	],
+// 	trillMode: (
+// 		enabled: false,
+// 		index: 0
+// 	)
+// ));
+// ~melodyDict.put(\set3, (
+// 	name: "Third Set",
+// 	patterns: [
+// 		[39,54,61,65,66,70,66,65,61,54,46]
+// 		//        [46,54,61,65,66,70,66,65,61,54,46]
+// 	],
+// 	trillMode: (
+// 		enabled: false,
+// 		index: 0
+// 	)
+// ));
+// ~melodyDict.put(\set4, (
+// 	name: "Fourth Set",
+// 	patterns: [
+// 		[39, 46, 51, 53, 54, 58, 61, 58, 54, 53, 51, 46, 42]
+// 	],
+// 	trillMode: (
+// 		enabled: false,
+// 		index: nil
+// 	)
+// ));
+// ~melodyDict.put(\set5, (
+// 	name: "Fifth Set",
+// 	patterns: [
+// 		[39,46,49,53,54,58,60,58,54,53,49,46,41],
+// 	],
+// 	trillMode: (
+// 		enabled: false,
+// 		index: nil
+// 	)
+// ));
+// ~melodyDict.put(\set6, (
+// 	name: "Sixth Set",
+// 	patterns: [
+// 		[39,54,61,65,66,70,66,65,61,54,46]
+// 	],
+// 	trillMode: (
+// 		enabled: false,
+// 		index: nil
+// 	)
+// ));
 
 // Define development cycles
 ~developmentCycles = Dictionary.new;
 ~developmentCycles.put(1, (
     name: "Initial Cycle",
-    sequence: [\set1, \set1, \set2, \set3, \set1, \set1, \set1]  // A A B C A A A
+	sequence: [\set1, \set1, \set2, \set2,\set3,\set3,\set3,\set3, \set4, \set4,\set5,\set5,\set6,\set6,\set6,\set6,\set6,\set6]  // A A B C A A A
 ));
 ~developmentCycles.put(2, (
     name: "Extended Cycle",
-    sequence: [\set1, \set1, \set2, \set3, \set4, \set5, \set1, \set1, \set1]  // A A B C D E A A A
+    sequence: [\set1, \set1, \set2, \set2,\set3,\set3, \set4, \set5, \set6]  // A A B C A A A
 ));
 ~developmentCycles.put(3, (
     name: "Full Cycle",
-    sequence: [\set1, \set1, \set2, \set3, \set4, \set5, \set6, \set1, \set1, \set1]  // A A B C D E F G A A A
+    sequence: [\set1, \set1, \set2, \set2,\set3,\set3, \set4, \set5, \set6]  // A A B C A A A
 ));
 
 // Helper function to switch cycles
@@ -126,6 +199,7 @@
     var trillNote = nil;
     var cycleCompletionCount = 0;
     var getNextMelodyIndex;  // Declare the function variable here
+    var firstNoteDuration = 0;  // Add the new variable for first note duration
 
     // Initialize with first cycle
     ~currentSequence = ~developmentCycles[~currentCycle].sequence;
@@ -156,6 +230,7 @@
         restTime = ~midiController.sliderValues[2].linlin(0, 127, 0.01, 0.5);
         temporalAccent = ~midiController.sliderValues[5].linlin(0, 127, 0.75, 1.5);
         velocity = ~midiController.sliderValues[3].linlin(0, 127, 0, 100);
+        firstNoteDuration = ~midiController.sliderValues[6].linlin(0, 127, 0.1, 2.0);  // 0.1 to 2 seconds for first note
 
         // Update tempo
         ts.setBPM(~midiController.sliderValues[0].linlin(0, 127, 60, 400));
@@ -183,18 +258,19 @@
         currentNote.post; " ".post;
         if(noteIndex == 0) {
             ["TEMPORAL ACCENT:", temporalAccent].postln;
+            ["First Note Duration:", firstNoteDuration].postln;
         } {
             "".postln;
         };
 
-        // Apply temporal accent to the note duration for the first note
+        // Apply duration based on note position
         accentedDuration = if(noteIndex == 0) {
-            noteDuration * temporalAccent;
+            firstNoteDuration  // Use the special first note duration
         } {
-            noteDuration;
+            noteDuration  // Use regular note duration for other notes
         };
 
-        postf("note duration: % (accent: %)\n", accentedDuration, if(noteIndex == 0) { temporalAccent } { 1 });
+        postf("note duration: % (first note: %)\n", accentedDuration, if(noteIndex == 0) { "yes" } { "no" });
         accentedDuration.wait;
 
         // Release current note only if it's not the trill note

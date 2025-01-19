@@ -132,31 +132,23 @@ SynthDef(\BowEnvelopeStroke, {
 ~bowDirection = 0;  // 0 = up bow (0->127), 1 = down bow (127->0)
 // Define a richer chord sequence
 ~chordSequence = [
-    [ // C major -> G major (up a fifth)
-        [53, 54, 58, 61],  // C major
-        [53, 54, 58, 63],   // G major
+    [
+        [51, 58, 51, 58],
+        [54, 61, 54, 61]
     ],
-    [ // F major -> C major (down a fifth)
-        [53, 54, 58, 63],   // G major
-        [54, 58, 63, 65],   // G major
-    ],
-    [ // A minor -> E minor (up a fifth)
-        [54, 58, 63, 65],   // G major
-        [65, 63, 65, 70]   // E minor
-    ],
-    [ // D minor -> G major (resolution)
-        [65, 63, 65, 70]   // E minor
-        [53, 54, 58, 61],  // C major
-    ]
-];
+    [
+        [54, 61, 54, 61],
+        [51, 58, 51, 58]
+	]
+    ];
 
 // Test bending chords across multiple VSTs
 ~multiVSTBendTest = Task({
     var noteDuration = 6;
     var currentPairIndex = 0;
-    var detacheMode = true;  // Enable detaché bowing
+    var detacheMode = false;  // Enable detaché bowing
     var bendLoopMode = true; // Enable continuous bend loop
-    var fullCycleTime = 18;   // Time for complete loop (there and back)
+    var fullCycleTime = 10;   // Time for complete loop (there and back)
     var activeSynths = List.new;  // Keep track of all active synths
 
     loop {
@@ -217,7 +209,7 @@ SynthDef(\BowEnvelopeStroke, {
                         \chanIndex, index,
                         \start, bowStart,
                         \end, bowEnd,
-                        \dur, fullCycleTime * 0.5,
+                        \dur, fullCycleTime,
                         \loopMode, 1
                     ]);
                     activeSynths.add(bowSynth);

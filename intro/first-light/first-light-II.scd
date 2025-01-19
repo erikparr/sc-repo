@@ -277,7 +277,7 @@
 
 // Control commands
 ~sketch.play;
-~repetitions = 1;  // Change number of repetitions
+~repetitions = 3;  // Change number of repetitions
 ~stop = true;
 
 // Cycle control commands

@@ -14,31 +14,31 @@
 ~melodyDict.put(\set1, (
     name: "First Set",
     patterns: [
-        [51, 58, 53],
+        [58,53,51],
     ],
     trillMode: (
-        enabled: true,
+        enabled: false,
         index: 0
     )
 ));
 ~melodyDict.put(\set2, (
     name: "Second Set",
     patterns: [
-        [61, 53, 54 ],
+        [53,54,58,60,61,70]
     ],
     trillMode: (
-        enabled: true,
-        index: 1
+        enabled: false,
+        index: 0
     )
 ));
 ~melodyDict.put(\set3, (
     name: "Third Set",
     patterns: [
-        [61, 58, 54],
-    ],
+        [53,54,58,60,61,70]
+            ],
     trillMode: (
         enabled: false,
-        index: nil
+        index: 0
     )
 ));
 ~melodyDict.put(\set4, (
@@ -76,7 +76,7 @@
 ~developmentCycles = Dictionary.new;
 ~developmentCycles.put(1, (
     name: "Initial Cycle",
-    sequence: [\set1, \set1, \set2, \set3, \set1, \set1, \set1]  // A A B C A A A
+    sequence: [\set1, \set2, \set3, \set3]  // A A B C A A A
 ));
 ~developmentCycles.put(2, (
     name: "Extended Cycle",
@@ -277,7 +277,7 @@
 
 // Control commands
 ~sketch.play;
-~repetitions = 1;  // Change number of repetitions
+~repetitions = 12;  // Change number of repetitions
 ~stop = true;
 
 // Cycle control commands
