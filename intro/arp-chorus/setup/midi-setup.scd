@@ -18,14 +18,16 @@
 // MIDI setup with VST mapping
 AppClock.sched(0, {
 	~environmentUI = EnvironmentUI.new;
+
 	~midiController = MIDIController(~vstList, n, nil, 16, 0, true);
-	
+
 	// Move VST mapping inside the AppClock block
 	~midiController.startVSTMapping((
 		\vsti0: [
 			[0, 16, 0],  // First knob (CC 16) maps to knob index 0
-			// [0, 17, 1],  // Second knob (CC 17) maps to knob index 1
-			[0, 23, 3],   // bow pressure
+			[0, 17, 1],  // Second knob (CC 17) maps to knob index 1
+			[0, 18, 2],  // bow pressure accent
+			[0, 19, 3],   // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
 			[0, 27, 6],   // bow pressure accent
@@ -33,51 +35,57 @@ AppClock.sched(0, {
 		],
 		\vsti1: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
-			[0, 23, 3],    // bow pressure
+			[0, 17, 1],
+			[0, 18, 2],	 // bow pressure accent
+			[0, 19, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
-			[0, 27, 6],   // bow pressure accent
+			[0, 27, 6],
 			[0, 28, 7]   // bow position
 		],
 		\vsti2: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
-			[0, 23, 3],    // bow pressure
+			[0, 17, 1],
+			[0, 18, 2],	 // bow pressure accent
+			[0, 19, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
-			[0, 27, 6],   // bow pressure accent
+			[0, 27, 6],
 			[0, 28, 7]   // bow position
 		],
 		\vsti3: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
-			[0, 23, 3],    // bow pressure
+			[0, 17, 1],
+			[0, 18, 2],	 // bow pressure accent
+			[0, 19, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
-			[0, 27, 6],   // bow pressure accent
+			[0, 27, 6],
 			[0, 28, 7]   // bow position
 		],
 		\vsti4: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
-			[0, 23, 3],    // bow pressure
+			[0, 17, 1],
+			[0, 18, 2],	 // bow pressure accent
+			[0, 19, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
-			[0, 27, 6],   // bow pressure accent
+			[0, 27, 6],
 			[0, 28, 7]   // bow position
 		],
 		\vsti5: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
-			[0, 23, 3],    // bow pressure
+			[0, 17, 1],
+			[0, 18, 2],	 // bow pressure accent
+			[0, 19, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
-			[0, 27, 6],   // bow pressure accent
+			[0, 27, 6],
 			[0, 28, 7]   // bow position
 		],
+
 	));
-	
+
 	nil; // return nil to prevent rescheduling
 });
 

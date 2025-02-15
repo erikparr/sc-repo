@@ -14,22 +14,20 @@ VSTPlugin.search(options: ( exclude: [ "/Library/Audio/Plug-Ins/VST3/Komplete Ko
 ~vstList = Dictionary.new;
 // !! set to 0,1 channels for main output
 // ~synth = Synth(\insert4, [\bus1, 0, \bus2, 1]);
-~synth = Synth(\insertStrings, [\bus, 2]); // set to 2 and 3 for routing to reaper (set up routing in totalmix)
+~synth = Synth(\insertStrings2Channel, [\bus, 2]); // set to 2 and 3 for routing to reaper (set up routing in totalmix)
 //strings
-// ~dCello1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
-// ~dCello2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
-// ~dCello3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
-// ~dCello4 = VSTPluginController(~synth, \vsti3).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
-// ~dCello5 = VSTPluginController(~synth, \vsti4).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
-// ~dCello6 = VSTPluginController(~synth, \vsti5).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
-
-
-~dCello1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
-~dCello2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
-~dCello3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
-~dCello4 = VSTPluginController(~synth, \vsti3).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
-~dCello5 = VSTPluginController(~synth, \vsti4).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
-~dCello6 = VSTPluginController(~synth, \vsti5).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
+// ~cello1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
+// ~cello2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
+// ~dBass1 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Double Bass 3.vst3", editor: true);
+// ~viola1 = VSTPluginController(~synth, \vsti3).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
+~dBass1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Double Bass 3.vst3", editor: true);
+~dBass2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Double Bass 3.vst3", editor: true);
+~dBass3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Double Bass 3.vst3", editor: true);
+~dBass4 = VSTPluginController(~synth, \vsti3).open("/Library/Audio/Plug-Ins/VST3/SWAM Double Bass 3.vst3", editor: true);
+~dBass5 = VSTPluginController(~synth, \vsti4).open("/Library/Audio/Plug-Ins/VST3/SWAM Double Bass 3.vst3", editor: true);
+~dBass6 = VSTPluginController(~synth, \vsti5).open("/Library/Audio/Plug-Ins/VST3/SWAM Double Bass 3.vst3", editor: true);
+// ~dBass4 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Double Bass 3.vst3", editor: true);
+// ~dBass5 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Double Bass 3.vst3", editor: true);
 
 //Double reeds
 // ~bassoon1 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Bassoon 3.vst3", editor: true);
@@ -43,12 +41,17 @@ VSTPlugin.search(options: ( exclude: [ "/Library/Audio/Plug-Ins/VST3/Komplete Ko
 // ~pigments = VSTPluginController(~synth, \vstiRoute).open("/Library/Audio/Plug-Ins/VST3/Pigments.vst3");
 // ~neutone = VSTPluginController(~synth, \vstiRoute).open("/Library/Audio/Plug-Ins/VST3/Neutone FX.vst3");
 // ~vstList.add(\vsti0 -> ~cello1);
+// ~vstList.add(\vsti1 -> ~cello2);
+// ~vstList.add(\vsti3 -> ~viola1);
+~vstList.add(\vsti0 -> ~dBass1);
+~vstList.add(\vsti1 -> ~dBass2);
+~vstList.add(\vsti2 -> ~dBass3);
+~vstList.add(\vsti3 -> ~dBass4);
+~vstList.add(\vsti4 -> ~dBass5);
+~vstList.add(\vsti5 -> ~dBass6);
+// ~vstList.add(\vsti3 -> ~dBass4);
+// ~vstList.add(\vsti4 -> ~dBass5);
 
-~vstList.add(\vsti0 -> ~dCello2);
-~vstList.add(\vsti1 -> ~dCello3);
-~vstList.add(\vsti2 -> ~dCello4);
-~vstList.add(\vsti3 -> ~dCello5);
-~vstList.add(\vsti4 -> ~dCello6);
 // ~vstList.add(\vstiRoute ->  ~pigments);
 // ~vstList.add(\vstiRoute ->  ~neutone);
 

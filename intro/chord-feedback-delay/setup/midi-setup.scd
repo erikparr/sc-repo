@@ -19,13 +19,14 @@
 AppClock.sched(0, {
 	~environmentUI = EnvironmentUI.new;
 	~midiController = MIDIController(~vstList, n, nil, 16, 0, true);
-	
+
 	// Move VST mapping inside the AppClock block
 	~midiController.startVSTMapping((
 		\vsti0: [
 			[0, 16, 0],  // First knob (CC 16) maps to knob index 0
-			// [0, 17, 1],  // Second knob (CC 17) maps to knob index 1
-			[0, 23, 3],   // bow pressure
+			[0, 17, 1],  // Second knob (CC 17) maps to knob index 1
+			[0, 18, 2],  // bow pressure accent
+			[0, 19, 3],   // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
 			[0, 27, 6],   // bow pressure accent
@@ -33,51 +34,57 @@ AppClock.sched(0, {
 		],
 		\vsti1: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
-			[0, 23, 3],    // bow pressure
+			[0, 17, 1],
+			[0, 18, 2],	 // bow pressure accent
+			[0, 19, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
-			[0, 27, 6],   // bow pressure accent
+			[0, 27, 6],
 			[0, 28, 7]   // bow position
 		],
 		\vsti2: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
-			[0, 23, 3],    // bow pressure
+			[0, 17, 1],
+			[0, 18, 2],	 // bow pressure accent
+			[0, 19, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
-			[0, 27, 6],   // bow pressure accent
+			[0, 27, 6],
 			[0, 28, 7]   // bow position
 		],
 		\vsti3: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
-			[0, 23, 3],    // bow pressure
+			[0, 17, 1],
+			[0, 18, 2],	 // bow pressure accent
+			[0, 19, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
-			[0, 27, 6],   // bow pressure accent
+			[0, 27, 6],
 			[0, 28, 7]   // bow position
 		],
 		\vsti4: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
-			[0, 23, 3],    // bow pressure
+			[0, 17, 1],
+			[0, 18, 2],	 // bow pressure accent
+			[0, 19, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
-			[0, 27, 6],   // bow pressure accent
+			[0, 27, 6],
 			[0, 28, 7]   // bow position
 		],
 		\vsti5: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
-			[0, 23, 3],    // bow pressure
+			[0, 17, 1],
+			[0, 18, 2],	 // bow pressure accent
+			[0, 19, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
-			[0, 27, 6],   // bow pressure accent
+			[0, 27, 6],
 			[0, 28, 7]   // bow position
 		],
+
 	));
-	
+
 	nil; // return nil to prevent rescheduling
 });
 
@@ -196,3 +203,43 @@ AppClock.sched(0, {
 		};
 	};
 }, 48); // match cc 23
+// ~amRate1.free;
+// ~amRate2.free;
+// ~amDepth1.free;
+// ~amDepth2.free;
+// ~test.free;
+// Add AM control MIDI functions
+~amRate1 = MIDIFunc.cc({|val|
+    var rate = val.linexp(0, 127, 0.1, 10);
+    ["Setting Group 1 AM Rate:", rate].postln;
+    if(~postProcess1.notNil) {
+        ~postProcess1.set(\amRate, rate);
+		 ~postProcess2.set(\amRate, rate);
+    } {
+        "Warning: postProcess1 synth not initialized".postln;
+    };
+}, 0);
+
+~amDepth1 = MIDIFunc.cc({|val|
+    var depth = val.linlin(0, 127, 0, 1);
+    ["Setting Group 1 AM Depth:", depth].postln;
+    if(~postProcess1.notNil) {
+        ~postProcess1.set(\amDepth, depth);
+    } {
+        "Warning: postProcess1 synth not initialized".postln;
+    };
+}, 1);
+// ~amRate1.free;
+// ~amRate2 = MIDIFunc.cc({|val|
+//     var rate = val.linexp(0, 127, 0.1, 10);
+//     ~postProcess2.set(\amRate, rate);
+// }, 2);
+
+// ~amDepth2 = MIDIFunc.cc({|val|
+//     var depth = val.linlin(0, 127, 0, 1);
+//     ~postProcess2.set(\amDepth, depth);
+// }, 3);
+
+// ~test = MIDIFunc.cc({ |value, controller, channel, src|
+// 	("Controller: % | Value: % | Channel: %").format(controller, value, channel).postln;
+// });
