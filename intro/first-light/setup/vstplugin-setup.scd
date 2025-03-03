@@ -22,7 +22,7 @@ VSTPlugin.search(options: ( exclude: [ "/Library/Audio/Plug-Ins/VST3/Komplete Ko
 // ~dCello4 = VSTPluginController(~synth, \vsti3).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
 // ~dCello5 = VSTPluginController(~synth, \vsti4).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
 // ~dCello6 = VSTPluginController(~synth, \vsti5).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
-
+//
 
 ~dCello1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
 ~dCello2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
@@ -30,6 +30,12 @@ VSTPlugin.search(options: ( exclude: [ "/Library/Audio/Plug-Ins/VST3/Komplete Ko
 ~dCello4 = VSTPluginController(~synth, \vsti3).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
 ~dCello5 = VSTPluginController(~synth, \vsti4).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
 ~dCello6 = VSTPluginController(~synth, \vsti5).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
+// ~dCello1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Flugelhorn.vst3", editor: true);
+// ~dCello2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Flugelhorn Eb.vst3", editor: true);
+// ~dCello3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Piccolo Trumpet.vst3", editor: true);
+// ~dCello4 = VSTPluginController(~synth, \vsti3).open("/Library/Audio/Plug-Ins/VST3/SWAM Trumpet.vst3", editor: true);
+// ~dCello5 = VSTPluginController(~synth, \vsti4).open("/Library/Audio/Plug-Ins/VST3/SWAM Trumpet C.vst3", editor: true);
+// ~dCello6 = VSTPluginController(~synth, \vsti5).open("/Library/Audio/Plug-Ins/VST3/SWAM Trumpet.vst3", editor: true);
 
 //Double reeds
 // ~bassoon1 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Bassoon 3.vst3", editor: true);

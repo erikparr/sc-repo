@@ -15,25 +15,25 @@
 ~proceduralMode = true;  // Toggle for procedural vs MIDI control
 ~restTimeEnvs = [
     Env(
-		[0.5,0.1,0.5],  // levels - from max to min rest time
-		[5, 5],           // times in seconds
+		[0.016 , 0.016 ],  // levels - from max to min rest time
+		[10],           // times in seconds
 		\exp                         // curve
     ),
     Env(
-        [0.5, 0.2, 0.5],       // different pattern
-        [6, 4, 8],                   // different timing
-        \exp
-    ),
-    Env(
-		[0.5,0.1,0.5],  // levels - from max to min rest time
-		[5, 5],           // times in seconds
+		[0.016 , 0.016 ],  // levels - from max to min rest time
+		[18],           // times in seconds
 		\exp                         // curve
     ),
     Env(
-        [0.5, 0.2, 0.5],       // different pattern
-        [6, 4, 8],                   // different timing
-        \exp
-    )
+		[0.016 , 0.016 ],  // levels - from max to min rest time
+		[10],           // times in seconds
+		\exp                         // curve
+    ),
+        Env(
+		[0.016 , 0.016 ],  // levels - from max to min rest time
+		[18],           // times in seconds
+		\exp                         // curve
+    ),
 ];
 
 
@@ -42,22 +42,22 @@
     Env(
         [0, 127, 0],     // levels - scaled from 0 to 127
 		[5, 5],           // times in seconds
-		\exp                         // curve
+		\sin                         // curve
     ),
     Env(
         [0, 127, 0],     // levels - scaled from 0 to 127
         [6, 4, 8],                   // different timing
-        \exp
+        \sin
     ),
     Env(
         [0, 127, 0],     // levels - scaled from 0 to 127
 		[5, 5],           // times in seconds
-		\exp                         // curve
+		\sin                         // curve
     ),
     Env(
         [0, 127, 0],     // levels - scaled from 0 to 127
         [6, 4, 8],                   // different timing
-        \exp
+        \sin
     )
 ];
 
@@ -209,7 +209,7 @@
 // Control ranges with curve definitions
 ~controlRanges = (
     rest: (min: 0.1, max: 0.75, curve: 3),    // Exponential curve
-    chord: (min: 0.016, max: 0.055, curve: -3),  // Inverse exponential
+    chord: (min: 0.016, max: 0.15, curve: -3),  // Inverse exponential
     tempo: (min: 60, max: 400, curve: 2),       // Quadratic curve
     velocity: (min: 0, max: 100, curve: 1),     // Linear (curve: 1)
 );
@@ -284,29 +284,8 @@
 
         // Calculate chord duration with separate slider control
         chordDuration = if(~proceduralMode) {
-            var envTime = now - envStartTime;
-            var currentMinValue = ~chordMinEnv.at(envTime);
-            var currentChordLevel;
-
-            // Check if we've exceeded the envelope duration
-            if(envTime >= ~chordMinEnv.times.sum) {
-                currentMinValue = ~chordMinEnv.levels.last;
-            };
-
-            // Only post when we reach a new chord level
-            if(currentMinValue != lastChordLevel) {
-                ["Chord min duration:", currentMinValue.round(0.001)].postln;
-                lastChordLevel = currentMinValue;
-            };
-
-            // Calculate chord duration using the envelope-controlled minimum
-            restTime.lincurve(
-                ~controlRanges.rest.min,
-                ~controlRanges.rest.max,
-                ~controlRanges.chord.max,
-                currentMinValue,  // Use envelope value instead of fixed minimum
-                ~controlRanges.chord.curve
-            );
+			// hard coded chord duration
+			0.142;
         } {
             // MIDI control logic using slider 3 for chord duration
             var value = ~midiController.sliderValues[3].lincurve(
@@ -460,7 +439,7 @@ SynthDef(\CCEnvelope, {
         Env.new(
             levels: [start, end],
             times: [dur],
-            curve: \exp
+            curve: \sin
         ),
         doneAction: 2
     );
@@ -552,3 +531,4 @@ SynthDef(\CCEnvelope, {
 // Now you can run:
 ~startCCSequence.value;
 ~sketch.play;
+~stop = true;

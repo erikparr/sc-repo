@@ -19,12 +19,12 @@
 AppClock.sched(0, {
 	~environmentUI = EnvironmentUI.new;
 	~midiController = MIDIController(~vstList, n, nil, 16, 0, true);
-	
+
 	// Move VST mapping inside the AppClock block
 	~midiController.startVSTMapping((
 		\vsti0: [
 			[0, 16, 0],  // First knob (CC 16) maps to knob index 0
-			// [0, 17, 1],  // Second knob (CC 17) maps to knob index 1
+			[0, 17, 1],  // Second knob (CC 17) maps to knob index 1
 			[0, 23, 3],   // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
@@ -33,7 +33,7 @@ AppClock.sched(0, {
 		],
 		\vsti1: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
+			[0, 17, 1],
 			[0, 23, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
@@ -42,7 +42,7 @@ AppClock.sched(0, {
 		],
 		\vsti2: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
+			[0, 17, 1],
 			[0, 23, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
@@ -51,7 +51,7 @@ AppClock.sched(0, {
 		],
 		\vsti3: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
+			[0, 17, 1],
 			[0, 23, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
@@ -60,7 +60,7 @@ AppClock.sched(0, {
 		],
 		\vsti4: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
+			[0, 17, 1],
 			[0, 23, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
@@ -69,7 +69,7 @@ AppClock.sched(0, {
 		],
 		\vsti5: [
 			[0, 16, 0],  // Same mappings for second VST
-			// [0, 17, 1],
+			[0, 17, 1],
 			[0, 23, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
@@ -77,7 +77,7 @@ AppClock.sched(0, {
 			[0, 28, 7]   // bow position
 		],
 	));
-	
+
 	nil; // return nil to prevent rescheduling
 });
 
@@ -196,3 +196,65 @@ AppClock.sched(0, {
 		};
 	};
 }, 48); // match cc 23
+(
+// Free existing handlers
+~nextChordButton.free;
+~prevChordButton.free;
+
+// Add MIDI button handlers for sequence navigation using Note messages
+~nextChordButton = MIDIFunc.noteOn({ |vel, note, chan|
+    ["Next button pressed:",
+     "Note:", note,
+     "Velocity:", vel,
+     "Channel:", chan,
+     "Procedural Mode:", ~proceduralMode,
+     "Current Index:", ~currentChordSetIndex,
+     "Current Sequence:", ~currentSequence,
+     "Chord Dict:", ~chordDict.notNil
+    ].postln;
+
+    if(~proceduralMode.not) {
+        // Advance to next chord in sequence
+        ~currentChordSetIndex = (~currentChordSetIndex + 1) % ~currentSequence.size;
+        ~currentChordList = ~chordDict[~currentSequence[~currentChordSetIndex]].patterns;
+        ["Moving to next chord set:", ~chordDict[~currentSequence[~currentChordSetIndex]].name].postln;
+
+        // If we've completed the sequence, advance cycle
+        if(~currentChordSetIndex == 0) {
+            ~advanceCycle.value;
+            ~currentSequence = ~developmentCycles[~currentCycle].sequence;
+        };
+    };
+}, 99, nil);  // Note number 99, any channel
+
+~prevChordButton = MIDIFunc.noteOn({ |vel, note, chan|
+    ["Prev button pressed:",
+     "Note:", note,
+     "Velocity:", vel,
+     "Channel:", chan,
+     "Procedural Mode:", ~proceduralMode,
+     "Current Index:", ~currentChordSetIndex,
+     "Current Sequence:", ~currentSequence,
+     "Chord Dict:", ~chordDict.notNil
+    ].postln;
+
+    if(~proceduralMode.not) {
+        // Move to previous chord in sequence
+        ~currentChordSetIndex = (~currentChordSetIndex - 1);
+        if(~currentChordSetIndex < 0) {
+            // If we're at the start, go to previous cycle
+            if(~currentCycle > 1) {
+                ~switchCycle.value(~currentCycle - 1);
+            };
+            ~currentChordSetIndex = ~currentSequence.size - 1;
+        };
+        ~currentChordList = ~chordDict[~currentSequence[~currentChordSetIndex]].patterns;
+        
+        // Update the currentChordList in the sketch Task
+        ~sketch.set(\currentChordList, ~currentChordList);
+        
+        ["Moving to previous chord set:", ~chordDict[~currentSequence[~currentChordSetIndex]].name].postln;
+    };
+}, 98, nil);  // Note number 98, any channel
+
+)

@@ -1,18 +1,47 @@
 (PathName(thisProcess.nowExecutingPath).pathOnly ++ "setup/_setup-loader.scd").load;
 
-/* MELODIC PART 2 with Individual Note Playback */
+
+
 (
+// Clear any existing OSC responders
+OSCdef(\noteOn).free;
+OSCdef(\noteOff).free;
+
+// OSC responder for note events with debug printing
+OSCdef(\noteOn, { |msg, time, addr, recvPort|
+    var channel = msg[1].asInteger;
+    var note = msg[2].asInteger;
+    var velocity = msg[3].asInteger;
+    var duration = msg[4].asFloat;
+
+    ["OSC Received:", "channel:", channel, "note:", note, "vel:", velocity, "dur:", duration].postln;
+
+    // Play the note on all VST instances
+    ~vstList.do { |item, index|
+        ["Playing on VST:", index].postln;
+        item.midi.noteOn(index, note, velocity);
+
+        // Schedule note release
+        SystemClock.sched(duration, {
+            ["Releasing note:", note, "on channel:", index].postln;
+            item.midi.noteOff(index, note, 0);
+            nil;
+        });
+    };
+}, '/note/on');
+
+/* MELODIC PART 2 with Individual Note Playback */
 ~bpm = 298;
 ~stop = false;
 ~repetitions = 6;
 ~randomMode = false;
 ~currentMelodySetIndex = 0;
-~currentCycle = 1;  // Track which cycle we're in
+~currentCycle = 2;  // Track which cycle we're in
 
 // Melody sets dictionary
 ~melodyDict = Dictionary.new;
 ~melodyDict.put(\set1, (
-    name: "First Set",
+    name: "I A",
     patterns: [
         [70,65,63],
     ],
@@ -22,7 +51,7 @@
     )
 ));
 ~melodyDict.put(\set2, (
-    name: "Second Set",
+    name: "II A",
     patterns: [
         [70,65,61]
     ],
@@ -32,7 +61,7 @@
     )
 ));
 ~melodyDict.put(\set3, (
-    name: "Third Set",
+    name: "III A",
     patterns: [
         [66,65,63]
             ],
@@ -42,7 +71,7 @@
     )
 ));
 ~melodyDict.put(\set4, (
-    name: "Fourth Set",
+    name: "IV A",
     patterns: [
         [70,65,61],
     ],
@@ -52,7 +81,7 @@
     )
 ));
 ~melodyDict.put(\set5, (
-    name: "Fifth Set",
+    name: "V A",
     patterns: [
         [61,58,54],
     ],
@@ -62,7 +91,7 @@
     )
 ));
 ~melodyDict.put(\set6, (
-    name: "Sixth Set",
+    name: "VI A",
     patterns: [
         [60,57,53],
     ],
@@ -73,7 +102,7 @@
 	));
 
 ~melodyDict.put(\set0b, (
-    name: "First Set",
+    name: "I B",
     patterns: [
         [70,65,61],
     ],
@@ -83,7 +112,7 @@
     )
 ));
 ~melodyDict.put(\set1b, (
-    name: "First Set",
+    name: "II B",
     patterns: [
         [66,65,61],
     ],
@@ -93,7 +122,7 @@
     )
 ));
 ~melodyDict.put(\set2b, (
-    name: "Second Set",
+    name: "II B",
     patterns: [
         [66,65,63]
     ],
@@ -103,7 +132,7 @@
     )
 ));
 ~melodyDict.put(\set3b, (
-    name: "Third Set",
+    name: "III B",
     patterns: [
         [65,63,61]
             ],
@@ -113,7 +142,7 @@
     )
 ));
 ~melodyDict.put(\set4b, (
-    name: "Fourth Set",
+    name: "IV B",
     patterns: [
         [63,61,58],
     ],
@@ -123,7 +152,7 @@
     )
 ));
 ~melodyDict.put(\set5b, (
-    name: "Fifth Set",
+    name: "V B",
     patterns: [
         [61,58,54],
     ],
@@ -133,7 +162,7 @@
     )
 ));
 ~melodyDict.put(\set6b, (
-    name: "Sixth Set",
+    name: "VI B",
     patterns: [
         [63,61,54],
     ],
@@ -143,7 +172,7 @@
     )
 ));
 ~melodyDict.put(\set7b, (
-    name: "Seventh Set",
+    name: "VII B",
     patterns: [
         [66,65,58],
     ],
@@ -152,7 +181,82 @@
         index: nil
     )
 ));
+~melodyDict.put(\set8b, (
+    name: "VIII B",
+    patterns: [
+        [70,66,65],
+    ],
+    trillMode: (
+        enabled: false,
+        index: nil
+    )
+));
+~melodyDict.put(\set9b, (
+    name: "IX B",
+    patterns: [
+        [73,70,65],
+    ],
+    trillMode: (
+        enabled: false,
+        index: nil
+    )
+));
 
+// set I C
+~melodyDict.put(\set0c, (
+    name: "I C",
+    patterns: [
+        [61,60,58],
+    ],
+));
+
+// set II C
+~melodyDict.put(\set1c, (
+    name: "II C",
+    patterns: [
+        [65, 60, 57],
+    ],
+));
+
+// set III C
+~melodyDict.put(\set2c, (
+    name: "III C",
+    patterns: [
+        [66, 60, 58],
+    ],
+));
+
+// set I D
+~melodyDict.put(\set0d, (
+    name: "I D",
+    patterns: [
+        [70, 65, 61],
+    ],
+));
+
+// set II D
+~melodyDict.put(\set1d, (
+    name: "II D",
+    patterns: [
+        [73, 65, 63],
+    ],
+));
+
+// set III D
+~melodyDict.put(\set2d, (
+    name: "III D",
+    patterns: [
+        [73,66,63],
+    ],
+));
+
+// set IV D
+~melodyDict.put(\set3d, (
+    name: "IV D",
+    patterns: [
+        [72,65,60],
+    ],
+));
 // Define development cycles
 ~developmentCycles = Dictionary.new;
 ~developmentCycles.put(1, (
@@ -162,11 +266,26 @@
 ));
 ~developmentCycles.put(2, (
     name: "Extended Cycle",
-    sequence: [\set0b, \set0b, \set1b, \set1b, \set2b, \set3b, \set4b, \set5b, \set6b,  \set6b,\set7b,\set7b, \set1b, \set1b, \set1b]  // A A B C D E A A A
+    sequence: [\set1b, \set1b, \set8b, \set1b, \set9b ]  // A A B C D E A A A
 ));
 ~developmentCycles.put(3, (
     name: "Full Cycle",
-    sequence: [\set1, \set1, \set2, \set3, \set4, \set5, \set6, \set1, \set1, \set1]  // A A B C D E F G A A A
+    sequence: [\set0c, \set1c, \set2c,\set1c, \set0c]  // A A B C D E F G A A A
+));
+//bridge
+~developmentCycles.put(4, (
+    name: "Extended Cycle",
+    sequence: [\set3,\set3,\set3,\set3,\set3,\set3,\set1b, \set2b, \set3b, \set4b, \set5b, \set6b,  \set6b,\set7b,\set7b, \set1b, \set1b, \set1b]  // A A B C D E A A A
+));
+
+~developmentCycles.put(5, (
+    name: "Extended Cycle",
+    sequence: [\set0d, \set1d, \set2d, \set3d]  // A A B C D E A A A
+));
+
+~developmentCycles.put(6, (
+    name: "Extended Cycle",
+    sequence: [\set3, \set3, \set3, \set3,\set7b,\set7b,\set7b,\set7b, \set0d,  \set0d, \set1d,\set1d, \set2d, \set2d]  // A A B C D E A A A
 ));
 
 // Helper function to switch cycles
@@ -195,183 +314,91 @@
 
 ~sketch = Task({
     var ts = TimeSignature.new(2, 3, ~bpm);
-    var noteDuration = 0, restTime = 0;
-    var currentNote = 0;
-    var noteIndex = 0;
-    var melodyIndex = 0;
+    var currentNote, noteIndex = 0, melodyIndex = 0;
     var repetitionCount = 0;
     var currentMelodyList;
-    var temporalAccent;
-    var velocity;
     var currentMelodySet;
-    var trillNote = nil;
     var cycleCompletionCount = 0;
-    var getNextMelodyIndex;
-    var activeNotes;  // Dictionary to track active notes and their release times
 
-    // Initialize
+    // Initialize sequence
     ~currentSequence = ~developmentCycles[~currentCycle].sequence;
-    activeNotes = Dictionary.new;
-
-    // Define the function after declaring it
-    getNextMelodyIndex = {
-        if(~randomMode) {
-            var currentIndex = melodyIndex;
-            while({
-                melodyIndex = currentMelodyList.size.rand;
-                melodyIndex == currentIndex;
-            });
-            melodyIndex;
-        } {
-            (melodyIndex + 1) % currentMelodyList.size;
-        };
-    };
-
-    ~stop = false;
     currentMelodySet = ~melodyDict[~currentSequence[~currentMelodySetIndex]];
     currentMelodyList = currentMelodySet.patterns;
     currentNote = currentMelodyList[melodyIndex][noteIndex];
-    0.25.wait;
 
     loop({
-        var now = Main.elapsedTime;  // Current time
-        var releaseTime;  // When to release the current note
+        var noteDuration = ~midiController.sliderValues[1].linlin(0, 127, 0.001, 0.3);
+        var restTime = ~midiController.sliderValues[2].linlin(0, 127, 0.0001, 0.2);
+        var temporalAccent = ~midiController.sliderValues[5].linlin(0, 127, 0.75, 2);
+        var velocity = ~midiController.sliderValues[3].linlin(0, 127, 40, 127);
+        var actualDuration;
 
-        // Get timing values from MIDI controller
-        noteDuration = ~midiController.sliderValues[1].linlin(0, 127, 0.001, 0.75);
-        restTime = ~midiController.sliderValues[2].linlin(0, 127, 0.0001, 0.5);
-        temporalAccent = ~midiController.sliderValues[5].linlin(0, 127, 0.75, 2);
-        velocity = ~midiController.sliderValues[3].linlin(0, 127, 0, 100);
-
-        // Update tempo
-        ts.setBPM(~midiController.sliderValues[0].linlin(0, 127, 60, 400));
-
-        // Release any notes that have reached their duration
-        activeNotes.keysValuesDo({ |note, releaseAt|
-            if(releaseAt <= now) {
-                if(note != trillNote) {  // Don't release trill notes
-                    ~vstList.do { |item|
-                        item.midi.noteOff(0, note, 0);
-                    };
-                };
-                activeNotes.removeAt(note);
-            };
-        });
-
-        // Check if we need to release trill note due to a lower note
-        if(trillNote.notNil and: { currentNote < trillNote }) {
-            ~vstList.do { |item|
-                item.midi.noteOff(0, trillNote, 0);
-            };
-            trillNote = nil;
-        };
-
-        // Play current note and schedule its release
-        ~vstList.do { |item|
-            item.midi.noteOn(0, currentNote, velocity);
-        };
-
-        // Calculate when to release this note
-        releaseTime = now + if(noteIndex == 0) {
+        // Apply temporal accent to first note in pattern (noteIndex == 0)
+        // This happens EVERY time we play the first note of the pattern
+        actualDuration = if(noteIndex == 0) {
+            [
+                "Applying accent to first note:",
+                "Base Duration:", noteDuration,
+                "Accent Multiplier:", temporalAccent,
+                "Final Duration:", noteDuration * temporalAccent
+            ].postln;
             noteDuration * temporalAccent
         } {
             noteDuration
         };
-        activeNotes.put(currentNote, releaseTime);
 
-        // Handle trill mode
-        if(currentMelodySet.trillMode.enabled
-            and: { currentMelodySet.trillMode.index == noteIndex }
-            and: { trillNote.isNil }) {
-            trillNote = currentNote;
-        };
+        // Send note event with debug info
+        ["Playing note:", currentNote, "duration:", actualDuration, "noteIndex:", noteIndex].postln;
+        NetAddr.localAddr.sendMsg('/note/on', 0, currentNote, velocity, actualDuration);
 
-        // Print current note info
-        currentNote.post; " ".post;
-        if(noteIndex == 0) {
-            ["TEMPORAL ACCENT:", temporalAccent].postln;
-        } {
-            "".postln;
-        };
-
-        // Wait base duration before next note
-        noteDuration.wait;
+        // Wait for rest time before next note
         restTime.wait;
 
-        // Advance to next note in current melody
+        // Advance sequence
         noteIndex = (noteIndex + 1) % (currentMelodyList[melodyIndex].size);
 
-        // If we've completed the current melody
+        // If we've completed the current pattern
         if(noteIndex == 0) {
             repetitionCount = repetitionCount + 1;
-            if (repetitionCount >= ~repetitions) {
+            if(repetitionCount >= ~repetitions) {
                 repetitionCount = 0;
-                melodyIndex = getNextMelodyIndex.value;
+                ~currentMelodySetIndex = (~currentMelodySetIndex + 1) % ~currentSequence.size;
 
-                // If we've completed all melodies in current set, move to next set in sequence
-                if(melodyIndex == 0) {
-                    // Release any existing trill note before changing sets
-                    if(trillNote.notNil) {
-                        ~vstList.do { |item|
-                            item.midi.noteOff(0, trillNote, 0);
-                        };
-                        trillNote = nil;
+                if(~currentMelodySetIndex == 0) {
+                    cycleCompletionCount = cycleCompletionCount + 1;
+                    if(cycleCompletionCount >= 2) {
+                        cycleCompletionCount = 0;
+                        ~advanceCycle.value;
                     };
+                };
 
-                    ~currentMelodySetIndex = (~currentMelodySetIndex + 1) % ~currentSequence.size;
-
-                    // Check if we've completed a full cycle
-                    if(~currentMelodySetIndex == 0) {
-                        cycleCompletionCount = cycleCompletionCount + 1;
-                        ["Completed cycle", ~currentCycle, cycleCompletionCount, "times"].postln;
-
-                        // After completing the cycle twice, advance to next cycle
-                        if(cycleCompletionCount >= 2) {
-                            cycleCompletionCount = 0;
-                            ~advanceCycle.value;
-                        };
-                    };
-
-                    currentMelodySet = ~melodyDict[~currentSequence[~currentMelodySetIndex]];
-                    currentMelodyList = currentMelodySet.patterns;
-                    ["Current melody set:", currentMelodySet.name].postln;
-                }
-            }
+                currentMelodySet = ~melodyDict[~currentSequence[~currentMelodySetIndex]];
+                currentMelodyList = currentMelodySet.patterns;
+                ["New Melody Set:", currentMelodySet.name, currentMelodyList[0]].postln;
+            };
         };
 
         currentNote = currentMelodyList[melodyIndex][noteIndex];
         ts.advance;
-
-        // Print time signature state
         ts.printCurrentTime;
 
-        // Print additional context for important time signature events
-        if(ts.isFirstBeatInBarAndMeasure) {
-            "=== NEW BAR ===".postln;
-        };
-
-        if(ts.isFirstBeatInMeasure) {
-            "--- NEW MEASURE ---".postln;
-        };
-
-        if(~stop == true) {
-            // Make sure to release trill note when stopping
-            if(trillNote.notNil) {
-                ~vstList.do { |item|
-                    item.midi.noteOff(0, trillNote, 0);
-                };
-            };
-            ~sketch.stop;
-        };
+        if(~stop) { ~sketch.stop };
     });
 });
 )
 
 // Control commands
-
+/* RIFT SETTINGS: [ Duration:, 0.072, Rest:, 0.055,  ] */
+/* RIFT SETTINGS: [ Duration:, 0.074, Rest:, 0.041  ] */
 ~sketch.play;
-~repetitions = 6;  // Change number of repetitions
+~repetitions = 18;  // Change number of repetitions
 ~stop = true;
+
+
+
+
+
+
 (
 10.do { |note, index|
 	var vstKey = (\vsti ++ index).asSymbol;
@@ -382,8 +409,14 @@
 	};
 };
 )
-
+/*[ OSC Received:, channel:, 0, note:, 66, vel:, 126, dur:, 0.17522047460079 ]
+*/
 // Cycle control commands
 ~switchCycle.value(1);  // Switch to cycle 1
 ~switchCycle.value(2);  // Switch to cycle 2
 ~switchCycle.value(3);  // Switch to cycle 3
+~switchCycle.value(4);  // Switch to cycle 3
+~switchCycle.value(5);  // Switch to cycle 3
+~switchCycle.value(6);  // Switch to cycle 3
+  ~sketch.play;
+~stop = true;
