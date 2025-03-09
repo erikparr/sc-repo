@@ -35,6 +35,7 @@ OSCdef(\noteOn, { |msg, time, addr, recvPort|
 ~stop = false;
 ~repetitions = 6;
 ~randomMode = false;
+~melodyRestMode = true;  // Toggle for longer rests between melodies
 ~currentMelodySetIndex = 0;
 ~currentCycle = 2;  // Track which cycle we're in
 
@@ -257,6 +258,55 @@ OSCdef(\noteOn, { |msg, time, addr, recvPort|
         [72,65,60],
     ],
 ));
+
+// set 0    E
+~melodyDict.put(\set0e, (
+    name: "I E",
+    patterns: [
+        [58, 54, 65, 63, 66],
+    ],
+));
+
+// set 1 E
+~melodyDict.put(\set1e, (
+    name: "II E",
+    patterns: [
+        [61, 58, 65, 63, 66],
+    ],
+));
+
+
+// set 2 E
+~melodyDict.put(\set2e, (
+    name: "III E",
+    patterns: [
+        [54, 65, 66, 58, 70],
+    ],
+));
+
+// set 3 E
+~melodyDict.put(\set3e, (
+    name: "IV E",
+    patterns: [
+        [51, 65, 54, 63, 66],
+    ],
+));
+
+// set 4 E
+~melodyDict.put(\set4e, (
+    name: "V E",
+    patterns: [
+        [51, 56, 65, 70],
+    ],
+));
+
+// set 5 E
+~melodyDict.put(\set5e, (
+    name: "VI E",
+    patterns: [
+        [51, 54, 65, 70],
+    ],
+));
 // Define development cycles
 ~developmentCycles = Dictionary.new;
 ~developmentCycles.put(1, (
@@ -287,6 +337,13 @@ OSCdef(\noteOn, { |msg, time, addr, recvPort|
     name: "Extended Cycle",
     sequence: [\set3, \set3, \set3, \set3,\set7b,\set7b,\set7b,\set7b, \set0d,  \set0d, \set1d,\set1d, \set2d, \set2d]  // A A B C D E A A A
 ));
+
+// slow mode cycle
+~developmentCycles.put(7, (
+    name: "Slow Mode Cycle",
+    sequence: [\set0e, \set1e, \set2e, \set3e, \set4e, \set5e]  // A A B C D E A A A
+));
+
 
 // Helper function to switch cycles
 ~switchCycle = { |cycleNumber|
@@ -328,13 +385,13 @@ OSCdef(\noteOn, { |msg, time, addr, recvPort|
 
     loop({
         var noteDuration = ~midiController.sliderValues[1].linlin(0, 127, 0.001, 0.3);
-        var restTime = ~midiController.sliderValues[2].linlin(0, 127, 0.0001, 0.2);
+        var noteRestTime = ~midiController.sliderValues[2].linlin(0, 127, 0.0001, 0.2);
+        var melodyRestTime = ~midiController.sliderValues[6].linlin(0, 127, 0.5, 8.0);  // Using slider 6 for melody rest
         var temporalAccent = ~midiController.sliderValues[5].linlin(0, 127, 0.75, 2);
         var velocity = ~midiController.sliderValues[3].linlin(0, 127, 40, 127);
         var actualDuration;
 
         // Apply temporal accent to first note in pattern (noteIndex == 0)
-        // This happens EVERY time we play the first note of the pattern
         actualDuration = if(noteIndex == 0) {
             [
                 "Applying accent to first note:",
@@ -352,7 +409,7 @@ OSCdef(\noteOn, { |msg, time, addr, recvPort|
         NetAddr.localAddr.sendMsg('/note/on', 0, currentNote, velocity, actualDuration);
 
         // Wait for rest time before next note
-        restTime.wait;
+        noteRestTime.wait;
 
         // Advance sequence
         noteIndex = (noteIndex + 1) % (currentMelodyList[melodyIndex].size);
@@ -362,6 +419,13 @@ OSCdef(\noteOn, { |msg, time, addr, recvPort|
             repetitionCount = repetitionCount + 1;
             if(repetitionCount >= ~repetitions) {
                 repetitionCount = 0;
+
+                // If melody rest mode is enabled, wait between melodies
+                if(~melodyRestMode) {
+                    ["Taking a longer rest between melodies:", melodyRestTime, "seconds"].postln;
+                    melodyRestTime.wait;
+                };
+
                 ~currentMelodySetIndex = (~currentMelodySetIndex + 1) % ~currentSequence.size;
 
                 if(~currentMelodySetIndex == 0) {
@@ -391,8 +455,10 @@ OSCdef(\noteOn, { |msg, time, addr, recvPort|
 /* RIFT SETTINGS: [ Duration:, 0.072, Rest:, 0.055,  ] */
 /* RIFT SETTINGS: [ Duration:, 0.074, Rest:, 0.041  ] */
 ~sketch.play;
-~repetitions = 18;  // Change number of repetitions
+~repetitions = 1;  // Change number of repetitions
 ~stop = true;
+~melodyRestMode = true;   // Enable melody rest mode
+~melodyRestMode = false;  // Disable melody rest mode
 
 
 
@@ -411,6 +477,8 @@ OSCdef(\noteOn, { |msg, time, addr, recvPort|
 )
 /*[ OSC Received:, channel:, 0, note:, 66, vel:, 126, dur:, 0.17522047460079 ]
 */
+//slow mode:
+/*[ OSC Received:, channel:, 0, note:, 70, vel:, 127, dur:, 0.066921256482601 */
 // Cycle control commands
 ~switchCycle.value(1);  // Switch to cycle 1
 ~switchCycle.value(2);  // Switch to cycle 2
@@ -418,5 +486,7 @@ OSCdef(\noteOn, { |msg, time, addr, recvPort|
 ~switchCycle.value(4);  // Switch to cycle 3
 ~switchCycle.value(5);  // Switch to cycle 3
 ~switchCycle.value(6);  // Switch to cycle 3
+~switchCycle.value(7);  // Switch to cycle 3
+~repetitions = 1;  // Change number of repetitions
   ~sketch.play;
 ~stop = true;
