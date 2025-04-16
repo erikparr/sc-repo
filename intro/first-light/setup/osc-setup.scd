@@ -40,13 +40,13 @@
 ~chordList = [];
 
 ~captureNotes = [];
-OSCdef(\onPlay, {
+~onPlay = OSCdef(\onPlay, {
 	arg msg;
-	msg.postln;
+	("onPlay: " + msg).postln;
 	~vstList.do { |item, i| item.midi.noteOn(msg[1], msg[2], 100); };
 	n.sendMsg('/keyOn', msg[1], msg[2]);
 }, '/keyOnPlay');
-OSCdef(\offPlay, {
+~offPlay =  OSCdef(\offPlay, {
 	arg msg;
 	~vstList.do { |item, i| item.midi.noteOff(msg[1], msg[2], 0); };
 	n.sendMsg('/keyOff', msg[1], msg[2]);

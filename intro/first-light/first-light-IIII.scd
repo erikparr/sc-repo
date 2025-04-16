@@ -487,6 +487,7 @@ OSCdef(\noteOn, { |msg, time, addr, recvPort|
 ~switchCycle.value(5);  // Switch to cycle 3
 ~switchCycle.value(6);  // Switch to cycle 3
 ~switchCycle.value(7);  // Switch to cycle 3
-~repetitions = 1;  // Change number of repetitions
+~repetitions = 1000;  // Change number of repetitions
+~repetitions = 5;  // Change number of repetitions
   ~sketch.play;
 ~stop = true;

@@ -19,6 +19,14 @@
 AppClock.sched(0, {
 	~environmentUI = EnvironmentUI.new;
 	~midiController = MIDIController(~vstList, n, nil, 16, 0, true);
+	// Toggle multi-channel mode (on by default)
+	~midiController.setMultiChannelMode(true);
+	// Toggle multi-instrument mode (requires multi-channel mode)
+	~midiController.setMultiInstrumentMode(true);
+	// Toggle velocity control via knob 7
+	~midiController.setVelocityCtrlMode(true);
+	// Toggle debug logging
+	~midiController.setDebug(true);
 
 	// Move VST mapping inside the AppClock block
 	~midiController.startVSTMapping((
@@ -102,28 +110,17 @@ AppClock.sched(0, {
 	}, nil, nil); // Use `nil` to match any MIDI device/channel
 
 
-
-~f1 = MIDIFunc.noteOn({arg veloc, pitch, chan;
-	chan = 0;
-	~bendSynth1.set(\gate, 1, \start, 0, \end, 0, \dur,0.0001);
-	// play glissando note mode
-	if (~glissandoNoteMode) {
-		SystemClock.sched(~knob2Val, {
-			// ~bendSynth1.set(\gate, 1, \start, 8192, \end, 16383, \dur,~knob1Val);
-			~bendSynth1.set(\gate, 1, \start, 0, \end, 8192, \dur,~knob1Val);
-		});
-	};
-	// play midi note and send osc to ethersonic, if glissando mode don't play note just glissssss
-	if(~glissandoMode == true, {
-		n.sendMsg('/glissOn', chan, pitch);
-	},{
-			~vstList.do { |item, i| item.midi.noteOn(chan, pitch, ~veloc); };
-			// ~testfx.midi.noteOn(chan, pitch, veloc);
-		n.sendMsg('/keyOn', chan, pitch);
-	});
-	~numNotesPlaying = ~numNotesPlaying + 1;
-	pitch.postln;
-});
+// ~f1 = MIDIFunc.noteOn({arg veloc, pitch, chan;
+// 	// chan = 0;
+// 	~bendSynth1.set(\gate, 1, \start, 0, \end, 0, \dur,0.0001);
+// 	// play midi note and send osc to ethersonic, if glissando mode don't play note just glissssss
+// 			~vstList.do { |item, i| item.midi.noteOn(chan, pitch, ~veloc); };
+// 			// ~testfx.midi.noteOn(chan, pitch, veloc);
+// 		n.sendMsg('/keyOn', chan, pitch);
+// 	~numNotesPlaying = ~numNotesPlaying + 1;
+// 	// display channel and pitch
+// 	("Channel: " ++ chan ++ " Pitch: " ++ pitch).postln;
+// });
 // ~vstList.at('vsti').midi.noteOn(0,55,100);
 // ~f1.free;
 ~f2 = MIDIFunc.noteOff({arg veloc, pitch, chan;
@@ -249,10 +246,10 @@ AppClock.sched(0, {
             ~currentChordSetIndex = ~currentSequence.size - 1;
         };
         ~currentChordList = ~chordDict[~currentSequence[~currentChordSetIndex]].patterns;
-        
+
         // Update the currentChordList in the sketch Task
         ~sketch.set(\currentChordList, ~currentChordList);
-        
+
         ["Moving to previous chord set:", ~chordDict[~currentSequence[~currentChordSetIndex]].name].postln;
     };
 }, 98, nil);  // Note number 98, any channel

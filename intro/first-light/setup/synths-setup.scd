@@ -1,5 +1,8 @@
 	SynthDef(\insert, { arg bus ;
-		ReplaceOut.ar(bus, VSTPlugin.ar(In.ar(bus, 2, 2), id: \vsti));
+		var input, output;
+		input = In.ar(bus, 2);  // Read 2 channels from the bus
+		output = VSTPlugin.ar(input, 2, id: \vsti0);  // Process through VST with 2 output channels
+		ReplaceOut.ar(bus, output);  // Output 2 channels back to the bus
 	}).add;
 
 	// synthdef for creating two synths in parallel
@@ -36,6 +39,25 @@
 		ReplaceOut.ar(6, sig3);  // ADAT 7/8
 	}).add;
 
+
+	SynthDef(\insertStrings4, { arg bus;
+		var sig1, sig2, sig3, sig4;
+		sig1 = In.ar(bus, 2);
+		sig2 = In.ar(bus, 2);
+		sig3 = In.ar(bus, 2);
+		sig4 = In.ar(bus, 2);
+		sig1 = VSTPlugin.ar(sig1, 2, id: \vsti0);
+		sig2 = VSTPlugin.ar(sig2, 2, id: \vsti1);
+		sig3 = VSTPlugin.ar(sig3, 2, id: \vsti2);
+		sig4 = VSTPlugin.ar(sig4, 2, id: \vsti3);
+
+		// Output to ADAT channels as defined in Babyface Pro manual
+		ReplaceOut.ar(2, sig1);  // ADAT 3/4
+		ReplaceOut.ar(2, sig2);  // ADAT 5/6
+		ReplaceOut.ar(4, sig3);  // ADAT 7/8
+		ReplaceOut.ar(4, sig4);  // ADAT 7/8
+	}).add;
+
 	SynthDef(\insertStrings, { arg bus;
 		var sig1, sig2, sig3, sig4, sig5, sig6;
 		sig1 = In.ar(bus, 2);
@@ -56,14 +78,10 @@
 		ReplaceOut.ar(6, Mix.new([sig3, sig6]));  // ADAT 7/8
 	}).add;
 
-	SynthDef(\singleVST, { arg bus ;
-		ReplaceOut.ar(bus, VSTPlugin.ar(In.ar(bus, 2, 2), id: \vst0));
-	}).add;
-
-
-
-	SynthDef(\singleVST, { arg bus ;
-		ReplaceOut.ar(bus, VSTPlugin.ar(In.ar(bus, 2, 2), id: \vst0));
+	SynthDef(\singleVST, { arg bus, sig;
+			sig = In.ar(bus, 2);
+			sig = VSTPlugin.ar(sig, 2, id: \vsti0);
+		ReplaceOut.ar(bus,sig);
 	}).add;
 
 

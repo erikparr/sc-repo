@@ -38,10 +38,12 @@ VSTPlugin.search(options: ( exclude: [ "/Library/Audio/Plug-Ins/VST3/Komplete Ko
 // ~dCello5 = VSTPluginController(~synth, \vsti4).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
 // ~dCello6 = VSTPluginController(~synth, \vsti5).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
 //
-// ~tuba = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Tuba.vst3", editor: true);
-~dCello1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
-~dCello2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
-~dCello3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
+~tuba1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Tuba.vst3", editor: true);
+~tuba2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Tuba.vst3", editor: true);
+~tuba3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Tuba.vst3", editor: true);
+// ~dCello1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
+// ~dCello2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
+// ~dCello3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
 // ~dCello4 = VSTPluginController(~synth, \vsti3).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
 // ~dCello5 = VSTPluginController(~synth, \vsti4).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
 // ~dCello6 = VSTPluginController(~synth, \vsti5).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
@@ -66,10 +68,12 @@ VSTPlugin.search(options: ( exclude: [ "/Library/Audio/Plug-Ins/VST3/Komplete Ko
 // ~neutone = VSTPluginController(~synth, \vstiRoute).open("/Library/Audio/Plug-Ins/VST3/Neutone FX.vst3");
 // ~vstList.add(\vsti0 -> ~cello1);
 
-// ~vstList.add(\vsti0 -> ~tuba);
-~vstList.add(\vsti0 -> ~dCello1);
-~vstList.add(\vsti1 -> ~dCello2);
-~vstList.add(\vsti2 -> ~dCello3);
+~vstList.add(\vsti0 -> ~tuba1);
+~vstList.add(\vsti1 -> ~tuba2);
+~vstList.add(\vsti2 -> ~tuba3);
+// ~vstList.add(\vsti0 -> ~dCello1);
+// ~vstList.add(\vsti1 -> ~dCello2);
+// ~vstList.add(\vsti2 -> ~dCello3);
 // ~vstList.add(\vsti3 -> ~dCello4);
 // ~vstList.add(\vsti3 -> ~dCello5);
 // ~vstList.add(\vsti4 -> ~dCello6);
