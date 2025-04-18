@@ -5,15 +5,13 @@
 // List of setup files in desired loading order
 ~setupFiles = [
     "synths-setup.scd", //load first to set up synthdefs, buses etc
-    "vstplugin-setup-tuba.scd",
+    "vstplugin-setup.scd",
     "midi-setup.scd",
-    "osc-setup.scd",
-    "../snapshotData/snapshot-functions.scd" // Load snapshot functions
+    "osc-setup.scd"
 ];
 
 // Load each setup file within a Routine
 Routine({
-    ~setupFiles = ~setupFiles ++ ["midi-setup-tuba.scd"]; // Add tuba-specific MIDI setup
     ~setupFiles.do { |filename|
         var filepath = ~setupDir +/+ filename;
         ("Loading setup file: " ++ filename).postln;

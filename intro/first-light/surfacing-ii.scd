@@ -16,18 +16,27 @@ OSCdef(\noteOn, { |msg, time, addr, recvPort|
     var isLastNote = msg[7].asInteger == 1;   // New parameter for last note
     var velocityMultiplier = 1.0;  // Default multiplier
 
-    // Apply velocity multiplier based on note position
-    if(isFirstNote == 1) {
-        velocityMultiplier = ~melodyDict[~currentSequence[~currentMelodySetIndex]].velocityMultipliers.first;
-        ["Applying first note velocity multiplier:", velocityMultiplier].postln;
-    };
-    if(isLastNote == 1) {
-        velocityMultiplier = ~melodyDict[~currentSequence[~currentMelodySetIndex]].velocityMultipliers.last;
-        ["Applying last note velocity multiplier:", velocityMultiplier].postln;
+    // Apply note offset if mode is enabled
+    if(~noteOffsetMode) {
+        note = (note + ~noteOffset).clip(0, 127);  // Ensure note stays within MIDI range
+        ["Applying note offset:", ~noteOffset, "Original note:", msg[2], "New note:", note].postln;
     };
 
-    // Apply the multiplier to the velocity
-    velocity = (velocity * velocityMultiplier).asInteger.clip(1, 127);
+    // Apply velocity multiplier based on note position if mode is enabled
+    if(~velocityMultiplyMode) {
+        if(isFirstNote == 1) {
+            velocityMultiplier = ~melodyDict[~currentSequence[~currentMelodySetIndex]].velocityMultipliers.first;
+            ["Applying first note velocity multiplier:", velocityMultiplier].postln;
+        };
+        if(isLastNote == 1) {
+            velocityMultiplier = ~melodyDict[~currentSequence[~currentMelodySetIndex]].velocityMultipliers.last;
+            ["Applying last note velocity multiplier:", velocityMultiplier].postln;
+        };
+
+        // Apply the multiplier to the velocity
+        velocity = (velocity * velocityMultiplier).asInteger.clip(1, 127);
+        ["Final velocity after multiplier:", velocity].postln;
+    };
 
     ["OSC Received:", "channel:", channel, "note:", note, "vel:", velocity, "dur:", duration, "fermata:", isFermata, "first:", isFirstNote, "last:", isLastNote].postln;
 
@@ -64,8 +73,11 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 ~stop = false;
 ~repetitions = 1;
 ~melodyRestMode = true;  // Toggle for longer rests between melodies
-~fermataMode = true;     // Toggle for holding the last note of each melody
-~rampTempoMode = true;  // Toggle for progressively shortening note rest times
+~fermataMode = false;     // Toggle for holding the last note of each melody
+~rampTempoMode = false;  // Toggle for progressively shortening note rest times
+~velocityMultiplyMode = true;  // Toggle for velocity multipliers on first/last notes
+~noteOffsetMode = true;  // Toggle for note offset mode
+~noteOffset = -12;  // Number of semitones to offset notes by (positive = up, negative = down)
 ~rampTempoStartMult = 0.1;  // Start with short rests (10% of normal)
 ~rampTempoEndMult = 5.0;    // End with longer rests (5x normal)
 ~rampTempoCurve = 1.0;     // Positive curve for fast-to-slow progression
@@ -144,6 +156,16 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
     ],
     velocityMultipliers: (
         first: 1.5,  // 150% velocity for first note
+        last:1    // 50% velocity for last note
+    )
+));
+~melodyDict.put(\set1b, (
+    name: "Tuba Melody I",
+    patterns: [
+        [94, 89, 84, 78,94, 89, 84, 78, 94],
+    ],
+    velocityMultipliers: (
+        first: 1.5,  // 150% velocity for first note
         last: 0.5    // 50% velocity for last note
     )
 ));
@@ -207,13 +229,57 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
         last: 0.5    // 50% velocity for last note
     )
 ));
+~melodyDict.put(\set8, (
+    name: "Tuba Melody I",
+    patterns: [
+        [85, 82, 78, 75],
+    ],
+    velocityMultipliers: (
+        first: 1,  // 150% velocity for first note
+        last: 1    // 50% velocity for last note
+    )
+));
+
+
+
+~melodyDict.put(\part2a, (
+    name: "Tuba Melody I",
+    patterns: [
+        [77, 75, 77, 89, 78, 75, 77, 78, 90, 77, 78, 94, 82, 73, 77, 89, 78],
+    ],
+    velocityMultipliers: (
+        first: 1,  // 150% velocity for first note
+        last: 1    // 50% velocity for last note
+    )
+));
+~melodyDict.put(\part2b, (
+    name: "Tuba Melody I",
+    patterns: [
+        [70, 85, 72, 87, 73, 89, 75, 87, 75, 85, 70, 84, 72, 82, 70, 85],
+    ],
+    velocityMultipliers: (
+        first: 1,  // 150% velocity for first note
+        last: 1    // 50% velocity for last note
+    )
+));
+
+
 
 // Define development cycles
 ~developmentCycles = Dictionary.new;
 ~developmentCycles.put(1, (
     name: "Initial Cycle",
-    sequence: [\set1,\set1,\set1,\set1,\set2,\set2,\set3,\set3,\set4,\set4,\set5,\set5,\set6,\set6,\set7,\set7]
+    sequence: [\set1,\set1b,\set1,\set1b,\set3,\set3,\set5,\set5,\set6,\set6,\set7,\set7]
 ));
+// ~developmentCycles.put(1, (
+// 	name: "Initial Cycle",
+// 	sequence: [\set8,\set8,\set8,\set8]
+// ));
+
+// ~developmentCycles.put(1, (
+// 	name: "Initial Cycle",
+// 	sequence: [\part2b]
+// ));
 
 
 // Helper function to switch cycles
@@ -255,37 +321,32 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
     currentNote = currentMelodyList[melodyIndex][noteIndex];
 
     loop({
-        var noteDuration = ~midiController.sliderValues[1].linlin(0, 127, 0.001, 0.3);
-        var noteRestTime = ~midiController.sliderValues[2].linlin(0, 127, 0.0001, 0.4);
-        var melodyRestTime = ~midiController.sliderValues[6].linlin(0, 127, 0.5, 8.0);  // Using slider 6 for melody rest
-        var temporalAccent = ~midiController.sliderValues[5].linlin(0, 127, 0.75, 2);
-        var velocity = ~midiController.sliderValues[3].linlin(0, 127, 40, 127);
+        var noteDuration = ~midiController.getSliderValue(1).linlin(0, 127, 0.001, 0.3);
+        var noteRestTime = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
+        var melodyRestTime = ~midiController.getSliderValue(6).linlin(0, 127, 0.5, 8.0);  // Using slider 6 for melody rest
+        var temporalAccent = ~midiController.getSliderValue(5).linlin(0, 127, 0.75, 2);
+        var baseVelocity = ~midiController.getSliderValue(3).linlin(0, 127, 11, 127);
         var actualDuration;
         var isLastNoteInMelody = (noteIndex == (currentMelodyList[melodyIndex].size - 1));
         var isFermata = isLastNoteInMelody && ~fermataMode && ~melodyRestMode;
         var melodyLength = currentMelodyList[melodyIndex].size;
         var isFirstNote = (noteIndex == 0);
         var isLastNote = isLastNoteInMelody;
+        var velocityMultiplier = 1.0;
+        var finalVelocity = baseVelocity;
 
-        // Apply rampTempo if enabled
-        if(~rampTempoMode) {
-            var normalizedPosition = noteIndex / (melodyLength - 1); // Position from 0.0 to 1.0
-            var curvedPosition, rampFactor;
-
-            // Apply selected curve type to the normalized position
-            curvedPosition = ~applyCurve.value(normalizedPosition, ~rampTempoCurveType, ~rampTempoCurve);
-
-            // Calculate the multiplier at this position
-            rampFactor = ~rampTempoStartMult.blend(~rampTempoEndMult, curvedPosition);
-
-            // Apply the multiplier to note rest time
-            noteRestTime = noteRestTime * rampFactor;
-
-            // Ensure rest time doesn't go below minimum
-            noteRestTime = noteRestTime.max(~rampTempoMinRest);
-
-            ["Ramp tempo:", "raw pos:", normalizedPosition, "curved pos:", curvedPosition,
-             "curve type:", ~rampTempoCurveType, "factor:", rampFactor, "rest time:", noteRestTime].postln;
+        // Apply velocity multiplier if mode is enabled
+        if(~velocityMultiplyMode) {
+            if(isFirstNote) {
+                velocityMultiplier = ~melodyDict[~currentSequence[~currentMelodySetIndex]].velocityMultipliers.at(\first);
+                ["First note velocity multiplier:", velocityMultiplier].postln;
+            };
+            if(isLastNote) {
+                velocityMultiplier = ~melodyDict[~currentSequence[~currentMelodySetIndex]].velocityMultipliers.at(\last);
+                ["Last note velocity multiplier:", velocityMultiplier].postln;
+            };
+            finalVelocity = (baseVelocity * velocityMultiplier).asInteger.clip(1, 127);
+            ["Velocity calculation:", "Base:", baseVelocity, "Multiplier:", velocityMultiplier, "Final:", finalVelocity].postln;
         };
 
         // Apply temporal accent to first note in pattern (noteIndex == 0)
@@ -320,8 +381,8 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
         };
 
         // Send note event with debug info
-        ["Playing note:", currentNote, "duration:", actualDuration, "noteIndex:", noteIndex, "fermata:", isFermata, "first:", isFirstNote, "last:", isLastNote].postln;
-        NetAddr.localAddr.sendMsg('/note/on', 0, currentNote, velocity, actualDuration, isFermata.asInteger, isFirstNote.asInteger, isLastNote.asInteger);
+        ["Playing note:", currentNote, "duration:", actualDuration, "noteIndex:", noteIndex, "fermata:", isFermata, "first:", isFirstNote, "last:", isLastNote, "velocity:", finalVelocity].postln;
+        NetAddr.localAddr.sendMsg('/note/on', 0, currentNote, finalVelocity, actualDuration, isFermata.asInteger, isFirstNote.asInteger, isLastNote.asInteger);
 
         // If this is a fermata note, store it for later release
         if(isFermata) {
@@ -393,6 +454,13 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 ~fermataMode = false;     // Disable fermata mode
 ~rampTempoMode = true;      // Enable ramp tempo mode
 ~rampTempoMode = false;     // Disable ramp tempo mode
+~velocityMultiplyMode = true;   // Enable velocity multiplier mode
+~velocityMultiplyMode = false;  // Disable velocity multiplier mode
+~noteOffsetMode = true;    // Enable note offset mode
+~noteOffsetMode = false;   // Disable note offset mode
+~noteOffset = 12;          // Set note offset to 12 semitones (one octave up)
+~noteOffset = -12;         // Set note offset to -12 semitones (one octave down)
+~noteOffset = 0;           // Reset note offset to 0
 ~rampTempoStartMult = 2.0;  // Start with longer rests (2x normal)
 ~rampTempoEndMult = 0.1;    // End with very short rests (10% of normal)
 ~rampTempoCurve = -4.0;     // Curve parameter for exponential type
@@ -430,3 +498,18 @@ Large positive values (5.0+): Dramatic slowing at the end
 };
 
 )
+
+// Load snapshot functions
+(PathName(thisProcess.nowExecutingPath).pathOnly ++ "snapshot-functions.scd").load;
+
+// Snapshot control commands
+~saveSnapshot.value("surfacing-intro-01b");  // Save current slider values as "default" snapshot
+~listSnapshots.value();  // List all available snapshots
+~saveSnapshotsToFile.value("surfacing-ii-snap.scd");  // Save all snapshots to a file
+~loadSnapshotsFromFile.value("surfacing-ii-snap.scd");  // Load snapshots from a file
+~listSnapshotFiles.value();  // List all available snapshot files
+~enableProgrammedMode.value("surfacing-intro-01a");  // Enable programmed mode with "default" snapshot
+~enableProgrammedMode.value("surfacing-intro-01b");  // Enable programmed mode with "default" snapshot
+~disableProgrammedMode.value();  // Disable programmed mode
+~getCurrentSnapshot.value();  // Get current snapshot name
+~isProgrammedMode.value();  // Check if programmed mode is active

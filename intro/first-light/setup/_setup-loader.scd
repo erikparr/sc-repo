@@ -7,7 +7,8 @@
     "synths-setup.scd", //load first to set up synthdefs, buses etc
     "vstplugin-setup.scd",
     "midi-setup.scd",
-    "osc-setup.scd"
+    "osc-setup.scd",
+    "../snapshotData/snapshot-functions.scd" // Load snapshot functions
 ];
 
 // Load each setup file within a Routine
