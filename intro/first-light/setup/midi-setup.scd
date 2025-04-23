@@ -20,9 +20,9 @@ AppClock.sched(0, {
 	~environmentUI = EnvironmentUI.new;
 	~midiController = MIDIController(~vstList, n, nil, 16, 0, true);
 	// Toggle multi-channel mode (on by default)
-	~midiController.setMultiChannelMode(true);
+	~midiController.setMultiChannelMode(false);
 	// Toggle multi-instrument mode (requires multi-channel mode)
-	~midiController.setMultiInstrumentMode(true);
+	~midiController.setMultiInstrumentMode(false);
 	// Toggle velocity control via knob 7
 	~midiController.setVelocityCtrlMode(true);
 	// Toggle debug logging

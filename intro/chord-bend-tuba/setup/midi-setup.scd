@@ -28,7 +28,7 @@ AppClock.sched(0, {
 	~midiController.startVSTMapping((
 		\vsti0: [
 			[0, 16, 0],  // First knob (CC 16) maps to knob index 0
-			[0, 17, 1],  // Second knob (CC 17) maps to knob index 1
+			// [0, 17, 1],  // Second knob (CC 17) maps to knob index 1
 			[0, 23, 3],   // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
@@ -37,7 +37,7 @@ AppClock.sched(0, {
 		],
 		\vsti1: [
 			[0, 16, 0],  // Same mappings for second VST
-			[0, 17, 1],
+			// [0, 17, 1],
 			[0, 23, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
@@ -46,7 +46,7 @@ AppClock.sched(0, {
 		],
 		\vsti2: [
 			[0, 16, 0],  // Same mappings for third VST
-			[0, 17, 1],
+			// [0, 17, 1],
 			[0, 23, 3],    // bow pressure
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain

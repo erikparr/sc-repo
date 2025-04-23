@@ -16,15 +16,8 @@
 		ReplaceOut.ar(bus1, Mix.new([sig1, sig2]));
 	}).add;
 
-	SynthDef(\insert3, { arg bus;
-		var sig;
-		sig = In.ar(bus, 2);
-		sig = VSTPlugin.ar(sig, 2, id: \vsti);
-		sig = VSTPlugin.ar(sig, 2, id: \vstiRoute);
-		ReplaceOut.ar(bus, sig);
-	}).add;
 
-	SynthDef(\insertStrings3, { arg bus;
+	SynthDef(\insert3, { arg bus;
 		var sig1, sig2, sig3;
 		sig1 = In.ar(bus, 2);
 		sig2 = In.ar(bus, 2);
@@ -82,6 +75,15 @@
 			sig = In.ar(bus, 2);
 			sig = VSTPlugin.ar(sig, 2, id: \vsti0);
 		ReplaceOut.ar(bus,sig);
+	}).add;
+
+	SynthDef(\doubleVST, { arg bus, sig, sig2;
+			sig = In.ar(bus, 2);
+			sig = VSTPlugin.ar(sig, 2, id: \vsti0);
+			sig2 = In.ar(bus, 2);
+			sig2 = VSTPlugin.ar(sig2, 2, id: \vsti1);
+			ReplaceOut.ar(2, sig);
+			ReplaceOut.ar(4, sig2);
 	}).add;
 
 

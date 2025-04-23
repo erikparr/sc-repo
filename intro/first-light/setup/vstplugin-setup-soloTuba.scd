@@ -29,7 +29,7 @@ VSTPlugin.search(options: ( exclude: [ "/Library/Audio/Plug-Ins/VST3/Komplete Ko
 //strings
 
 // four instruments / 2 channels
-~synth = Synth(\singleVST, [\bus, 2]); // set to 2 and 3 for routing to reaper (set up routing in totalmix)
+~synth = Synth(\insert3, [\bus, 2]); // set to 2 and 3 for routing to reaper (set up routing in totalmix)
 //strings
 // ~dCello1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
 // ~dCello2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
@@ -39,8 +39,11 @@ VSTPlugin.search(options: ( exclude: [ "/Library/Audio/Plug-Ins/VST3/Komplete Ko
 // ~dCello6 = VSTPluginController(~synth, \vsti5).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
 //
 ~tuba1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Tuba.vst3", editor: true);
-// ~tuba2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Tuba.vst3", editor: true);
-// ~tuba3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Tuba.vst3", editor: true);
+~tuba2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Tuba.vst3", editor: true);
+~tuba3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Tuba.vst3", editor: true);
+~vstList.add(\vsti0 -> ~tuba1);
+~vstList.add(\vsti1 -> ~tuba2);
+~vstList.add(\vsti2 -> ~tuba3);
 // ~dCello1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
 // ~dCello2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
 // ~dCello3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
@@ -68,9 +71,6 @@ VSTPlugin.search(options: ( exclude: [ "/Library/Audio/Plug-Ins/VST3/Komplete Ko
 // ~neutone = VSTPluginController(~synth, \vstiRoute).open("/Library/Audio/Plug-Ins/VST3/Neutone FX.vst3");
 // ~vstList.add(\vsti0 -> ~cello1);
 
-~vstList.add(\vsti0 -> ~tuba1);
-// ~vstList.add(\vsti1 -> ~tuba2);
-// ~vstList.add(\vsti2 -> ~tuba3);
 // ~vstList.add(\vsti0 -> ~dCello1);
 // ~vstList.add(\vsti1 -> ~dCello2);
 // ~vstList.add(\vsti2 -> ~dCello3);

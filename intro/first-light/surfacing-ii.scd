@@ -75,8 +75,9 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 ~melodyRestMode = true;  // Toggle for longer rests between melodies
 ~fermataMode = false;     // Toggle for holding the last note of each melody
 ~rampTempoMode = false;  // Toggle for progressively shortening note rest times
-~velocityMultiplyMode = true;  // Toggle for velocity multipliers on first/last notes
+~velocityMultiplyMode = false;  // Toggle for velocity multipliers on first/last notes
 ~noteOffsetMode = true;  // Toggle for note offset mode
+~removeLastMode = false;  // Toggle for skipping the last note in each melody
 ~noteOffset = -12;  // Number of semitones to offset notes by (positive = up, negative = down)
 ~rampTempoStartMult = 0.1;  // Start with short rests (10% of normal)
 ~rampTempoEndMult = 5.0;    // End with longer rests (5x normal)
@@ -240,6 +241,17 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
     )
 ));
 
+~melodyDict.put(\set9, (
+    name: "Tuba Melody I",
+    patterns: [
+        [94, 89, 84, 78,  70],
+    ],
+    velocityMultipliers: (
+        first: 1.5,  // 150% velocity for first note
+        last: 1    // 50% velocity for last note
+    )
+));
+
 
 
 ~melodyDict.put(\part2a, (
@@ -268,9 +280,15 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 // Define development cycles
 ~developmentCycles = Dictionary.new;
 ~developmentCycles.put(1, (
-    name: "Initial Cycle",
-    sequence: [\set1,\set1b,\set1,\set1b,\set3,\set3,\set5,\set5,\set6,\set6,\set7,\set7]
+	name: "Initial Cycle",
+	sequence: [\set1,\set1,\set1,\set1,\set3,\set3,\set5,\set5,\set6,\set6,\set7,\set7,\set1,\set1,]
 ));
+// Define development cycles
+// ~developmentCycles.put(1, (
+// 	name: "Initial Cycle",
+// 	sequence: [\set9,\set9,\set9,\set9]
+// ));
+
 // ~developmentCycles.put(1, (
 // 	name: "Initial Cycle",
 // 	sequence: [\set8,\set8,\set8,\set8]
@@ -313,27 +331,110 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
     var currentMelodyList;
     var currentMelodySet;
     var cycleCompletionCount = 0;
+    var effectiveMelodyLength;
 
     // Initialize sequence
     ~currentSequence = ~developmentCycles[~currentCycle].sequence;
     currentMelodySet = ~melodyDict[~currentSequence[~currentMelodySetIndex]];
     currentMelodyList = currentMelodySet.patterns;
-    currentNote = currentMelodyList[melodyIndex][noteIndex];
+
+    // Calculate effective melody length based on removeLastMode
+    effectiveMelodyLength = if(~removeLastMode == true) {
+        currentMelodyList[melodyIndex].size - 1
+    } {
+        currentMelodyList[melodyIndex].size
+    };
+
+    // Only get current note if the melody has notes left
+    if(effectiveMelodyLength > 0) {
+        currentNote = currentMelodyList[melodyIndex][noteIndex];
+    } {
+        currentNote = 60; // Default note if melody would be empty
+    };
 
     loop({
-        var noteDuration = ~midiController.getSliderValue(1).linlin(0, 127, 0.001, 0.3);
-        var noteRestTime = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
-        var melodyRestTime = ~midiController.getSliderValue(6).linlin(0, 127, 0.5, 8.0);  // Using slider 6 for melody rest
-        var temporalAccent = ~midiController.getSliderValue(5).linlin(0, 127, 0.75, 2);
-        var baseVelocity = ~midiController.getSliderValue(3).linlin(0, 127, 11, 127);
-        var actualDuration;
-        var isLastNoteInMelody = (noteIndex == (currentMelodyList[melodyIndex].size - 1));
-        var isFermata = isLastNoteInMelody && ~fermataMode && ~melodyRestMode;
-        var melodyLength = currentMelodyList[melodyIndex].size;
-        var isFirstNote = (noteIndex == 0);
-        var isLastNote = isLastNoteInMelody;
-        var velocityMultiplier = 1.0;
-        var finalVelocity = baseVelocity;
+        var noteDuration, noteRestTime, melodyRestTime, temporalAccent, baseVelocity,
+            actualDuration, isLastNoteInMelody, isFermata, isFirstNote, isLastNote,
+            velocityMultiplier, finalVelocity, maxDuration;
+
+        noteDuration = ~midiController.getSliderValue(1).linlin(0, 127, 0.001, 0.3);
+        noteRestTime = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
+        melodyRestTime = 4.47;  // Using slider 6 for melody rest
+        temporalAccent = ~midiController.getSliderValue(5).linlin(0, 127, 0.75, 2);
+        baseVelocity = ~midiController.getSliderValue(3).linlin(0, 127, 11, 127);
+
+        // Recalculate the effective melody length
+        effectiveMelodyLength = if(~removeLastMode == true) {
+            currentMelodyList[melodyIndex].size - 1
+        } {
+            currentMelodyList[melodyIndex].size
+        };
+
+        isLastNoteInMelody = (noteIndex == (effectiveMelodyLength - 1));
+        isFermata = isLastNoteInMelody && ~fermataMode && ~melodyRestMode;
+        isFirstNote = (noteIndex == 0);
+        isLastNote = isLastNoteInMelody;
+        velocityMultiplier = 1.0;
+        finalVelocity = baseVelocity;
+
+        // Check if we should skip this note (if it's the last note and removeLastMode is true)
+        if((~removeLastMode == true) && (noteIndex >= effectiveMelodyLength)) {
+            ["Skipping last note due to removeLastMode"].postln;
+            // Advance to next pattern
+            noteIndex = 0;
+            repetitionCount = repetitionCount + 1;
+
+            if(repetitionCount >= ~repetitions) {
+                repetitionCount = 0;
+
+                // Handle melody switching logic as in original code...
+                if(~melodyRestMode) {
+                    ["Taking a longer rest between melodies:", melodyRestTime, "seconds"].postln;
+                    melodyRestTime.wait;
+
+                    // If we have a fermata note, release it after the melody rest
+                    if(~lastFermataNote.notNil) {
+                        ["Releasing fermata note after melody rest:", ~lastFermataNote].postln;
+                        NetAddr.localAddr.sendMsg('/note/release', ~lastFermataNote);
+
+                        // Wait for the additional fermata release rest time
+                        ["Waiting for fermata release rest:", ~fermataReleaseRest, "seconds"].postln;
+                        ~fermataReleaseRest.wait;
+
+                        ~lastFermataNote = nil;
+                    };
+                };
+
+                ~currentMelodySetIndex = (~currentMelodySetIndex + 1) % ~currentSequence.size;
+
+                if(~currentMelodySetIndex == 0) {
+                    cycleCompletionCount = cycleCompletionCount + 1;
+                    if(cycleCompletionCount >= 2) {
+                        cycleCompletionCount = 0;
+                        ~advanceCycle.value;
+                    };
+                };
+
+                currentMelodySet = ~melodyDict[~currentSequence[~currentMelodySetIndex]];
+                currentMelodyList = currentMelodySet.patterns;
+                ["New Melody Set:", currentMelodySet.name, currentMelodyList[0]].postln;
+            };
+
+            // Update effective melody length with the new melody
+            effectiveMelodyLength = if(~removeLastMode == true) {
+                currentMelodyList[melodyIndex].size - 1
+            } {
+                currentMelodyList[melodyIndex].size
+            };
+
+            // Skip to next iteration without playing a note
+            currentNote = currentMelodyList[melodyIndex][noteIndex];
+            ts.advance;
+            ts.printCurrentTime;
+            noteRestTime.wait;
+            if(~stop) { ~sketch.stop };
+            nil.yield;
+        };
 
         // Apply velocity multiplier if mode is enabled
         if(~velocityMultiplyMode) {
@@ -366,7 +467,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
         // For fermata notes, we don't apply this limit since they're meant to be held
         if(isFermata.not) {
             // Leave a small gap (90% of rest time) to ensure clean separation between notes
-            var maxDuration = noteRestTime * 0.9;
+            maxDuration = noteRestTime * 0.9;
             if(actualDuration > maxDuration) {
                 ["Limiting duration to prevent overlap:", "Original:", actualDuration, "Limited:", maxDuration].postln;
                 actualDuration = maxDuration;
@@ -393,7 +494,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
         noteRestTime.wait;
 
         // Advance sequence
-        noteIndex = (noteIndex + 1) % (currentMelodyList[melodyIndex].size);
+        noteIndex = (noteIndex + 1) % (effectiveMelodyLength);
 
         // If we've completed the current pattern
         if(noteIndex == 0) {
@@ -435,7 +536,11 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
             };
         };
 
-        currentNote = currentMelodyList[melodyIndex][noteIndex];
+        // Make sure we don't try to access beyond the array bounds
+        if(noteIndex < currentMelodyList[melodyIndex].size) {
+            currentNote = currentMelodyList[melodyIndex][noteIndex];
+        };
+
         ts.advance;
         ts.printCurrentTime;
 
@@ -458,6 +563,8 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 ~velocityMultiplyMode = false;  // Disable velocity multiplier mode
 ~noteOffsetMode = true;    // Enable note offset mode
 ~noteOffsetMode = false;   // Disable note offset mode
+~removeLastMode = true;    // Enable skipping the last note in each melody
+~removeLastMode = false;   // Disable skipping the last note in each melody
 ~noteOffset = 12;          // Set note offset to 12 semitones (one octave up)
 ~noteOffset = -12;         // Set note offset to -12 semitones (one octave down)
 ~noteOffset = 0;           // Reset note offset to 0
@@ -503,6 +610,9 @@ Large positive values (5.0+): Dramatic slowing at the end
 (PathName(thisProcess.nowExecutingPath).pathOnly ++ "snapshot-functions.scd").load;
 
 // Snapshot control commands
+//Remember to load the snapshot first
+~loadSnapshotsFromFile.value("surfacing-ii-snap.scd");  // Load snapshots from a file
+
 ~saveSnapshot.value("surfacing-intro-01b");  // Save current slider values as "default" snapshot
 ~listSnapshots.value();  // List all available snapshots
 ~saveSnapshotsToFile.value("surfacing-ii-snap.scd");  // Save all snapshots to a file

@@ -66,6 +66,11 @@
     ~midiController.getKnobValue(index);
 };
 
+// Debug function to print current MIDIController values
+~printMIDIControllerValues = {
+    ~midiController.printCurrentValues;
+};
+
 // Example usage:
 /*
 // Save current slider and knob values as a snapshot
@@ -106,4 +111,7 @@
 
 // Get knob value with programmed mode support
 ~getKnobValue.value(0);  // Get value of first knob
+
+// Print current MIDIController values (debug)
+~printMIDIControllerValues.value();
 */ 
