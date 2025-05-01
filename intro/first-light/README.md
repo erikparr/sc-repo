@@ -1,60 +1,191 @@
-# Intro Melody Live Control
+# First Light: SuperCollider VST Controller System
 
-A SuperCollider-based interactive melodic pattern generator with live MIDI control capabilities.
+This project is a SuperCollider-based system for controlling VST instruments with a focus on musical composition and performance. It implements a sophisticated modular architecture for controlling Sample Modeling SWAM instruments (specifically, bass tuba), with support for MIDI control, sequencing, and real-time parameter manipulation.
 
-## Overview
+## Project Structure
 
-This project provides three different melodic pattern generators, each with increasing complexity and control:
+The project uses a modular setup with separate files for different functionality:
 
-1. **Melodic Part 1**: Basic arpeggiator with MIDI controller influence
-2. **Melodic Part 2**: Enhanced version with additional control parameters
-3. **Melodic Part 2 with Repetition and Random Mode**: Advanced version featuring:
-   - Configurable repetitions
-   - Random/Sequential melody selection
-   - Chord-based patterns
-4. **Melodic Part 2 with Individual Note Playback**: Final version featuring:
-   - Single note sequencing
-   - Customizable melody lists
-   - Enhanced playback control
+- **Setup Files**: Initialize core components of the system
+- **Controller Classes**: Custom classes for MIDI and VST interaction
+- **ProcMod System**: High-level gestural control system for musical events
+- **Main Implementation**: The `surfacing-procmod.scd` file implements the core musical logic
 
-## Features
+## Setup Files
 
-- Live tempo control via MIDI (60-400 BPM range)
-- Adjustable note timing and rest periods
-- MIDI velocity control
-- Switchable melody patterns
-- Random or sequential melody progression
-- Configurable repetition counts
+### `_setup-loader-soloTuba.scd`
 
-## Requirements
+The entry point that loads all other setup files in the correct order:
 
-- SuperCollider
-- MIDI Controller
-- VST instruments (configured in setup)
+```supercollider
+~setupFiles = [
+    "synths-setup.scd",          // SynthDefs for VST processing
+    "vstplugin-setup-soloTuba.scd", // VST instrument setup
+    "midi-setup.scd",            // MIDI controller setup
+    "osc-setup.scd",             // OSC communication setup
+    "../snapshotData/snapshot-functions.scd" // Parameter snapshots
+];
+```
+
+### `synths-setup.scd`
+
+Defines SynthDefs for processing VST instruments:
+- `\insert`, `\insert2`, `\insert3`: Route audio through VST plugins
+- `\insertStrings`, `\insertStrings4`: Specialized routing for string instruments
+- `\BendEnvelope1`, `\BendEnvelopeLoop`: Pitch bend envelope generators
+- `\ccEnvelopeLoop`: Control change (CC) envelope generator
+
+### `vstplugin-setup-soloTuba.scd`
+
+Sets up VST instruments:
+1. Searches for available VST plugins
+2. Creates the synth for routing audio through the VSTs
+3. Loads the SWAM Bass Tuba VST plugins (3 instances)
+4. Stores VST controllers in a dictionary for easy access
+5. Opens VST editor windows
+
+### `midi-setup.scd`
+
+Configures MIDI handling:
+1. Initializes variables for knob/controller values
+2. Creates a `MIDIController` instance for VST parameter mapping
+3. Sets up MIDI responders for:
+   - Note on/off events
+   - Control changes
+   - Pitch bend
+   - Button presses
+
+### `osc-setup.scd`
+
+Sets up OSC (Open Sound Control) communication:
+1. Initializes variables for velocity and glissando modes
+2. Creates OSC responders for:
+   - Note events
+   - Bend commands
+   - Chord morphing
+   - Glissando control
+   - BPM settings
+
+## Controller Classes
+
+### `MIDIController.sc`
+
+A custom class that handles:
+1. MIDI input/output and mapping to VST parameters
+2. Parameter snapshots for storing and recalling settings
+3. Different mapping modes:
+   - Multi-channel mode (distributes notes across MIDI channels)
+   - Multi-instrument mode (routes different notes to different VSTs)
+   - Velocity control mode
+4. Bend control with envelope generation
+5. Debug capabilities
+
+### `VSTPluginController.sc`
+
+Manages communication with VST plugins:
+1. Loads and initializes VST plugins
+2. Sends MIDI messages to VSTs
+3. Controls VST parameters
+4. Manages plugin presets
+5. Handles plugin editor windows
+6. Manages plugin programs/banks
+
+## ProcMod System
+
+The ProcMod system (from the JoshUGens library) provides high-level gestural control:
+
+### `ProcMod`
+
+A class for controlling modular processes:
+1. Controls how events unfold over time with an amplitude envelope
+2. Executes functions/tasks/routines when played
+3. Handles clean release of events
+4. Communicates state changes to listeners using a model-view-controller pattern
+
+### `ProcModR`
+
+An extension of ProcMod that adds real-time recording capabilities.
+
+### `ProcEvents`
+
+Manages sequences of ProcMod instances:
+1. Plays and releases events in sequence
+2. Controls timing between events
+3. Provides performance and rehearsal GUIs
+4. Records timelines for automated playback
+
+## Main Implementation: `surfacing-procmod.scd`
+
+This is the main composition file implementing a piece called "First Light" using the ProcMod system for better gestural control.
+
+### Key Components
+
+1. **Global Settings**:
+   - Tempo, note durations, and rest times
+   - Behavior modes (melodyRest, fermata, etc.)
+   - Note offset and repetition controls
+
+2. **Melody Dictionary**:
+   - Collection of tuba melody patterns
+   - Each melody has patterns and velocity multipliers
+   - Development cycles define sequence order
+
+3. **Helper Functions**:
+   - `~processNote`: Modifies notes based on current settings
+   - `~switchCycle`: Changes to a specific cycle
+   - `~advanceCycle`: Advances to the next cycle
+
+4. **OSC Responders**:
+   - Handle note events
+   - Manage fermata (held) notes
+
+5. **ProcMod Implementation**:
+   - Creates ProcMod instances for each melody
+   - Handles note playback with precise timing
+   - Manages melody transitions and repetitions
+
+6. **Control Functions**:
+   - `~playMelody`: Plays a specific melody
+   - `~playAllMelodiesInSequence`: Plays through the entire sequence
+   - `~nextMelody`: Advances to the next melody
+   - `~stopAllMelodies`: Stops all currently playing melodies
+   - `~setMode`: Configures behavior modes
+
+### Execution Flow
+
+1. Setup files are loaded when the script is executed
+2. VST instruments (SWAM Bass Tubas) are initialized
+3. MIDI and OSC responders are set up
+4. Melody ProcMods are created
+5. Playing a melody:
+   - Creates a Task that plays each note in sequence
+   - Applies velocity and timing variations
+   - Sends OSC messages to trigger notes
+   - Handles fermatas (held notes)
+   - Manages note releases
+6. Control functions provide an interface for performance
 
 ## Usage
 
-1. Load the SuperCollider file: `intrro-melody.scd`
-2. Ensure your MIDI controller is connected
-3. Run the desired melodic part section
-4. Control using the following commands:
+1. Load the main file with: `(PathName(thisProcess.nowExecutingPath).pathOnly ++ "setup/_setup-loader-soloTuba.scd").load;`
+2. Execute the main implementation: `surfacing-procmod.scd`
+3. Control playback with functions like:
+   - `~playAllMelodiesInSequence.value;`
+   - `~stopAllMelodies.value;`
+   - `~switchToCycle.value(1);`
 
-```supercollider
-~burst.play;        // Start playback
-~stop = true;       // Stop playback
-~repetitions = 24;  // Set number of repetitions
-~randomMode = true; // Enable random melody selection
-```
+## Design Philosophy
 
-## MIDI Controller Mapping
+The system uses a modular approach to separate concerns:
+1. VST instrument control (via VSTPluginController)
+2. MIDI mapping and control (via MIDIController)
+3. High-level gestural control (via ProcMod)
+4. Musical structure and composition logic
 
-- Slider 1: Tempo control (60-400 BPM)
-- Slider 2: Rest time (0.025-0.35 seconds)
-- Slider 3: Wait time (0.001-0.25 seconds)
-- Slider 4: Velocity control (0-100)
+This allows for flexibility in performance, with options for:
+- Procedural melody generation
+- Sequence-based playback
+- Real-time parameter control via MIDI controllers
+- Snapshot-based parameter recall
 
-## Notes
-
-- The project requires proper setup of VST instruments through the `setup/_setup-loader.scd` file
-- Each melodic part can be run independently
-- Changes to melody patterns can be made by modifying the `chordList` or `melodyList` arrays 
+The ProcMod system provides a way to think about musical gestures as events with specific amplitude envelopes, functions to execute, and release behaviors, making it well-suited for composed electroacoustic music with precise control over timing and expression. 

@@ -88,43 +88,135 @@
 
 
 	~bend1 = Bus.control;
-	SynthDef(\BendEnvelope1, {
-		arg start = 0, end = 1, dur = 1, chanIndex = 0;
-		var env;
-		env = EnvGen.kr(
-			Env([start, end], [dur], \sin),
-			gate: \gate.tr,
-			doneAction: 2
-		);
-		SendTrig.kr(Impulse.kr(64), id:chanIndex, value:env);  // Send triggers at a control rate of 64 Hz
-		// Out.kr(~bend1, env);
-	}).add;
-// ~bendSynth1 = Synth(\BendEnvelope1, \outbus, ~chordNote1);
 
-	SynthDef(\BendEnvelopeLoop, {
-		arg start = 0, end = 1, dur = 1, chanIndex = 0;
-		var env;
-		env = EnvGen.kr(
-			Env( [start, start, end, end, start], [dur*0.4, dur*0.1, dur*0.4, dur*0.1], \sin),
-			gate: Trig.kr(Impulse.kr(1), dur),
-			doneAction: 0
-		);
-		SendTrig.kr(Impulse.kr(64), id:chanIndex, value:env);  // Send triggers at a control rate of 64 Hz
-		// Out.kr(~bend1, env);
-	}).add;
+// Enhanced SynthDef for three-node bend envelope (start -> peak -> end)
+SynthDef(\BendEnvelope, {
+    arg start = 8192, peak = 8192, end = 8192,
+        peakTime = 1, returnTime = 1,
+        chanIndex = 0, peakCurve = \lin, returnCurve = \lin;
 
-// CC control envelopes
-	SynthDef(\ccEnvelopeLoop, {
-		arg start = 0, mid1 = 0.5, mid2 = 0.5, end = 1, dur = 1, chanIndex = 0;
-		var env;
-		env = EnvGen.kr(
-			Env([start,mid1,mid2, end], [dur*0.3333, dur*0.3333, dur*0.3334], \lin),
-			gate: Trig.kr(Impulse.kr(1), dur),
-			doneAction: 0
-		);
-		SendTrig.kr(Impulse.kr(64), id:chanIndex, value:env);  // Send triggers at a control rate of 64 Hz
-		// Out.kr(~bend1, env);
-	}).add;
+    var env = EnvGen.kr(
+        Env(
+            [start, peak, end],  // Three level points: start -> peak -> end
+            [peakTime, returnTime],  // Two segments: reach peak, then return
+            [peakCurve, returnCurve]  // Curve for each segment
+        ),
+        doneAction: 2
+    );
+
+    // Debug message at start
+    SendTrig.kr(Impulse.kr(0), chanIndex, start);
+
+    // Send values to OSC at high rate
+    SendReply.kr(
+        Impulse.kr(100),
+        '/bend',
+        [chanIndex, env],
+        replyID: chanIndex
+    );
+}).add;
+
+// Looping version of the bend envelope
+SynthDef(\BendEnvelopeLoop, {
+    arg start = 8192, peak = 8192, end = 8192,
+        delayTime = 0, peakTime = 1, returnTime = 1, loopDuration = 2,
+        chanIndex = 0, peakCurve = \lin, returnCurve = \lin, delayCurve = \lin,
+        timeOffset = 0;  // Added parameter for instance-specific time offset
+    
+    var trigRate = 1 / loopDuration;  // Calculate trigger frequency from duration
+    var trig = Impulse.kr(trigRate);  // Create trigger at specified rate
+    var totalDelay = delayTime + timeOffset;  // Add offset to delay time
+    var env = EnvGen.kr(
+        Env(
+            [start, start, peak, end],  // Four level points: start -> start -> peak -> end
+            [totalDelay, peakTime, returnTime],  // Three segments: delay, reach peak, then return
+            [delayCurve, peakCurve, returnCurve]  // Curve for each segment
+        ),
+        gate: Trig.kr(trig, totalDelay + peakTime + returnTime),  // Trigger envelope with proper duration
+        doneAction: 0  // Don't free when done - keep looping
+    );
+    
+    // Send debug trigger at start of each loop
+    SendTrig.kr(trig, chanIndex, start);
+    
+    // Send values to OSC at high rate
+    SendReply.kr(
+        Impulse.kr(100),  // 100 Hz control rate
+        '/bend',
+        [chanIndex, env],
+        replyID: chanIndex
+    );
+}).add;
+
+
+
+// Synth definition for ADSR expression envelope
+SynthDef(\ccEnvelope, {
+    arg start=0, peak=100, end=0, 
+        attackTime=0.5, releaseTime=0.5,
+        chanIndex=0, ccNum=11, attackCurve=\sin, releaseCurve=\sin;
+    var env;
+    
+    // Create a simpler three-point envelope like BendEnvelope
+    env = EnvGen.kr(
+        Env(
+            [start, peak, end],  // Three level points: start -> peak -> end
+            [attackTime, releaseTime],  // Two segments: reach peak, then release
+            [attackCurve, releaseCurve]  // Curve for each segment
+        ),
+        doneAction: 2
+    );
+    
+    // Debug message at start
+    SendTrig.kr(Impulse.kr(0), chanIndex + 100, start);
+    
+    // Send the control signal via OSC at same rate as bend
+    SendReply.kr(
+        Impulse.kr(100),  // Send 100 times per second
+        '/expression',
+        [chanIndex, ccNum, env.round(1).clip(0, 127)]  // Round to integer and clip for MIDI CC
+    );
+}).add;
+
+// Looping version of the expression envelope
+SynthDef(\ccEnvelopeLoop, {
+    arg start = 0, peak = 100, end = 0,
+        delayTime = 0, attackTime = 0.5, releaseTime = 0.5, loopDuration = 2,
+        chanIndex = 0, ccNum = 11, attackCurve = \sin, releaseCurve = \sin, delayCurve = \lin,
+        timeOffset = 0;  // Added parameter for instance-specific time offset
+    
+    var trigRate = 1 / loopDuration;  // Calculate trigger frequency from duration
+    var trig = Impulse.kr(trigRate);  // Create trigger at specified rate
+    var totalDelay = delayTime + timeOffset;  // Add offset to delay time
+    var env = EnvGen.kr(
+        Env(
+            [start, start, peak, end],  // Four level points: start -> start -> peak -> end
+            [totalDelay, attackTime, releaseTime],  // Three segments: delay, reach peak, then release
+            [delayCurve, attackCurve, releaseCurve]  // Curve for each segment
+        ),
+        gate: Trig.kr(trig, totalDelay + attackTime + releaseTime),  // Trigger envelope with proper duration
+        doneAction: 0  // Don't free when done - keep looping
+    );
+    
+    // Send debug trigger at start of each loop
+    SendTrig.kr(trig, chanIndex + 100, start);
+    
+    // Send the control signal via OSC
+    SendReply.kr(
+        Impulse.kr(100),
+        '/expression',
+        [chanIndex, ccNum, env.round(1).clip(0, 127)],  // Round to integer and clip for MIDI CC
+        replyID: chanIndex
+    );
+}).add;
+
+
+
+
+
+
+
+
 
 
 

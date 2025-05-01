@@ -110,6 +110,73 @@ SynthDef(\ExpressionEnvelope, {
     );
 }).add;
 
+// LOOPING VERSIONS OF THE ENVELOPES
+// --------------------------------
+
+// Looping version of the bend envelope
+SynthDef(\BendEnvelopeLoop, {
+    arg start = 8192, peak = 8192, end = 8192,
+        delayTime = 0, peakTime = 1, returnTime = 1, loopDuration = 2,
+        chanIndex = 0, peakCurve = \lin, returnCurve = \lin, delayCurve = \lin,
+        timeOffset = 0;  // Added parameter for instance-specific time offset
+    
+    var trigRate = 1 / loopDuration;  // Calculate trigger frequency from duration
+    var trig = Impulse.kr(trigRate);  // Create trigger at specified rate
+    var totalDelay = delayTime + timeOffset;  // Add offset to delay time
+    var env = EnvGen.kr(
+        Env(
+            [start, start, peak, end],  // Four level points: start -> start -> peak -> end
+            [totalDelay, peakTime, returnTime],  // Three segments: delay, reach peak, then return
+            [delayCurve, peakCurve, returnCurve]  // Curve for each segment
+        ),
+        gate: Trig.kr(trig, totalDelay + peakTime + returnTime),  // Trigger envelope with proper duration
+        doneAction: 0  // Don't free when done - keep looping
+    );
+    
+    // Send debug trigger at start of each loop
+    SendTrig.kr(trig, chanIndex, start);
+    
+    // Send values to OSC at high rate
+    SendReply.kr(
+        Impulse.kr(100),  // 100 Hz control rate
+        '/bend',
+        [chanIndex, env],
+        replyID: chanIndex
+    );
+}).add;
+
+// Looping version of the expression envelope
+SynthDef(\ExpressionEnvelopeLoop, {
+    arg start = 0, peak = 100, end = 0,
+        delayTime = 0, attackTime = 0.5, releaseTime = 0.5, loopDuration = 2,
+        chanIndex = 0, ccNum = 11, attackCurve = \sin, releaseCurve = \sin, delayCurve = \lin,
+        timeOffset = 0;  // Added parameter for instance-specific time offset
+    
+    var trigRate = 1 / loopDuration;  // Calculate trigger frequency from duration
+    var trig = Impulse.kr(trigRate);  // Create trigger at specified rate
+    var totalDelay = delayTime + timeOffset;  // Add offset to delay time
+    var env = EnvGen.kr(
+        Env(
+            [start, start, peak, end],  // Four level points: start -> start -> peak -> end
+            [totalDelay, attackTime, releaseTime],  // Three segments: delay, reach peak, then release
+            [delayCurve, attackCurve, releaseCurve]  // Curve for each segment
+        ),
+        gate: Trig.kr(trig, totalDelay + attackTime + releaseTime),  // Trigger envelope with proper duration
+        doneAction: 0  // Don't free when done - keep looping
+    );
+    
+    // Send debug trigger at start of each loop
+    SendTrig.kr(trig, chanIndex + 100, start);
+    
+    // Send the control signal via OSC
+    SendReply.kr(
+        Impulse.kr(100),
+        '/expression',
+        [chanIndex, ccNum, env.round(1).clip(0, 127)],  // Round to integer and clip for MIDI CC
+        replyID: chanIndex
+    );
+}).add;
+
 // Add OSC responder for expression control
 ~expressionFunc = OSCFunc({ |msg|
     var replyID = msg[2];

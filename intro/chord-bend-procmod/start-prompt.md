@@ -1,0 +1,3 @@
+@_setup-loader.scd @midi-setup.scd @osc-setup.scd @synths-setup.scd @vstplugin-setup.scd  understand the setup files and how everything works. @chord-bend-ctk-test.scd @chord-bend-midi-sliders.scd @HelpSource @MIDIController.sc@VSTPluginController.sc  understand the ctk sketches and how everything works. Understand the extension classes and how everything works in the context of the project. keep in mind supercollider syntax and remember supercollider help files for context. use best coding practices.
+
+think it through step by step, remember supercollider syntax, avoid complexity wherever possible. 
