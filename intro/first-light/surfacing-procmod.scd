@@ -18,7 +18,7 @@
 
 // Flags for different behavior modes
 ~modes = (
-    melodyRest: true,        // Enable longer rests between melodies
+    melodyRest: false,        // Enable longer rests between melodies
     fermata: false,          // Hold the last note of each melody
     rampTempo: false,        // Progressively change note rest times
     velocityMultiply: false, // Apply velocity multipliers to first/last notes
@@ -599,12 +599,12 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
     var pattern = ~melodyDict[melodyKey].patterns[patternIndex];
     var id = (melodyKey ++ "_" ++ patternIndex).asSymbol;
 
-    // Create an amplitude envelope with a release node
-    var env = Env([0, 1, 1, 0], [0.1, pattern.size * ~noteRest * 1.2, 0.5], \sin, 2);
+    // Create an amplitude envelope without a release node
+    var env = Env([0, 1, 1, 0], [0.1, pattern.size * ~noteRest, 0.3], \sin);
 
     // Create the ProcMod for this melody
     ProcMod.new(
-        env,          // Envelope with release node
+        env,          // Envelope without release node
         1.0,          // Amplitude
         id,           // Unique ID
         nil,          // Group (create new)
@@ -726,6 +726,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 
                 // Signal completion
                 ["Melody", melodyKey, "completed"].postln;
+                ["**** DEBUG: Melody task complete for", melodyKey, "- exact time:", Main.elapsedTime.round(0.001)].postln;
             });
 
             // Start the task
@@ -738,6 +739,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
         // Release function - executes after ProcMod has fully released
         { |group, envbus|
             ["ProcMod for", id, "has completed release"].postln;
+            ["**** DEBUG: ProcMod fully released for", id, "- exact time:", Main.elapsedTime.round(0.001)].postln;
 
             // Clean up resources if needed
             ~activeNotes.clear;
@@ -1053,242 +1055,6 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
         ~startCCEnvelopes.value(melodyKey);
     };
 };
-
-// =====================================================================
-// CC Control Profiles System
-// =====================================================================
-
-// Storage for different CC control profiles
-~ccProfiles = Dictionary.new;
-
-// Add the default profile (based on current settings)
-~ccProfiles.put(\default, ~ccControl.copy);
-
-// Create a few additional sample profiles
-~ccProfiles.put(\gentle, (
-    enabled: true,
-    expressionCC: 17,
-    expressionMin: 30,            // Lower minimum for gentler sound
-    expressionMax: 80,            // Lower maximum to avoid overblowing
-    expressionShape: \sin,        // Smooth sine shape
-    expressionPeakPos: 0.7,       // Peak later in the phrase
-    attackFactor: 0.6,            // Longer attack
-    decayFactor: 0.4,             // Shorter decay
-    bowPressureCC: 23,
-    harmAGainCC: 25,
-    harmBGainCC: 26,
-    bowPressureAccentCC: 27,
-    bowPositionCC: 28
-));
-
-~ccProfiles.put(\intense, (
-    enabled: true,
-    expressionCC: 17,
-    expressionMin: 60,            // Higher minimum for more present sound
-    expressionMax: 120,           // Higher maximum for intensity
-    expressionShape: \exp,        // Exponential curve for more dramatic build
-    expressionPeakPos: 0.4,       // Peak earlier in the phrase
-    attackFactor: 0.3,            // Faster attack
-    decayFactor: 0.7,             // Longer decay
-    bowPressureCC: 23,
-    harmAGainCC: 25,
-    harmBGainCC: 26,
-    bowPressureAccentCC: 27,
-    bowPositionCC: 28
-));
-
-~ccProfiles.put(\pulsing, (
-    enabled: true,
-    expressionCC: 17,
-    expressionMin: 40,
-    expressionMax: 100,
-    expressionShape: \sin,        // Sine shape works best for pulsing
-    expressionPeakPos: 0.5,       // Centered peak
-    attackFactor: 0.2,            // Very short attack for pulsing effect
-    decayFactor: 0.2,             // Very short decay for pulsing effect
-    bowPressureCC: 23,
-    harmAGainCC: 25,
-    harmBGainCC: 26,
-    bowPressureAccentCC: 27,
-    bowPositionCC: 28
-));
-
-// Function to list all available CC profiles
-~listCCProfiles = {
-    "Available CC Profiles:".postln;
-    ~ccProfiles.keys.asList.sort.do { |key|
-        var profile = ~ccProfiles[key];
-        ("  " ++ key ++ ": min=" ++ profile.expressionMin ++
-         ", max=" ++ profile.expressionMax ++
-         ", shape=" ++ profile.expressionShape ++
-         ", peakPos=" ++ profile.expressionPeakPos).postln;
-    };
-};
-
-// Function to apply a CC profile
-~applyCCProfile = { |profileName|
-    var profile = ~ccProfiles[profileName];
-
-    if(profile.notNil) {
-        // Store the current profile name
-        ~currentCCProfile = profileName;
-
-        // Apply the profile settings
-        ~ccControl = profile.copy;
-
-        ["Applied CC profile:", profileName].postln;
-
-        // Restart CC envelopes if they're already running
-        if(~activeCCSynths.size > 0) {
-            var melodyKey = ~currentSequence[~currentMelodySetIndex];
-            ~stopCCEnvelopes.value;
-
-            // Apply the appropriate type of envelope
-            if(~loopingCCEnvelopes) {
-                ~startLoopingCCEnvelopes.value(melodyKey);
-            }  {
-                ~startCCEnvelopesOnChannel0.value(melodyKey);
-            };
-        };
-
-        ^true;
-    } {
-        ["Profile not found:", profileName].postln;
-        ^false;
-    };
-};
-
-// Function to save the current settings as a profile
-~saveCurrentCCProfile = { |profileName|
-    ~ccProfiles.put(profileName, ~ccControl.copy);
-    ["Saved current settings as profile:", profileName].postln;
-};
-
-// Function to create a new CC profile with specified parameters
-~createCCProfile = { |profileName, params|
-    var newProfile = ~ccControl.copy; // Start with current settings
-
-    // Update with provided parameters
-    params.keysValuesDo { |key, value|
-        if(newProfile.includesKey(key)) {
-            newProfile[key] = value;
-        } {
-            ["Warning: Ignoring unknown parameter:", key].postln;
-        };
-    };
-
-    // Save the new profile
-    ~ccProfiles.put(profileName, newProfile);
-    ["Created new CC profile:", profileName].postln;
-
-    ^true;
-};
-
-// Function to create a sequence of CC profiles with automatically calculated timings
-~createCCProfileSequence = { |profileNames, melodyDurations = nil|
-    var sequence = List.new;
-    var durations = melodyDurations ?? {
-        // If no durations provided, use the same duration for each profile
-        profileNames.collect { ~calcEnvelopeDuration.value * 1.2 }
-    };
-
-    // Ensure we have the same number of durations as profiles
-    if(profileNames.size != durations.size) {
-        ["Error: Number of profiles (", profileNames.size,
-         ") does not match number of durations (", durations.size, ")"].postln;
-        ^nil;
-    };
-
-    // Create the sequence
-    profileNames.do { |name, i|
-        var profile = ~ccProfiles[name];
-
-        if(profile.notNil) {
-            sequence.add((
-                profile: name,
-                duration: durations[i]
-            ));
-        } {
-            ["Warning: Profile not found:", name, "- skipping in sequence"].postln;
-        };
-    };
-
-    if(sequence.size > 0) {
-        ~ccProfileSequence = sequence.asArray;
-        ["Created CC profile sequence with", sequence.size, "profiles"].postln;
-        ^true;
-    } {
-        ["Error: No valid profiles in sequence"].postln;
-        ^false;
-    };
-};
-
-// Function to play a sequence of CC profiles
-~currentCCProfileSequenceIndex = 0;
-~ccProfileSequenceActive = false;
-~ccProfileSequence = [];
-
-~startCCProfileSequence = {
-    if(~ccProfileSequence.size > 0) {
-        ~ccProfileSequenceActive = true;
-        ~currentCCProfileSequenceIndex = 0;
-        ~playCCProfileSequenceStep.value;
-        ["Started CC profile sequence with", ~ccProfileSequence.size, "steps"].postln;
-        ^true;
-    } {
-        "No CC profile sequence defined".postln;
-        ^false;
-    };
-};
-
-~stopCCProfileSequence = {
-    ~ccProfileSequenceActive = false;
-    "Stopped CC profile sequence".postln;
-};
-
-~playCCProfileSequenceStep = {
-    var step = ~ccProfileSequence[~currentCCProfileSequenceIndex];
-
-    if(step.notNil && ~ccProfileSequenceActive) {
-        // Apply the profile
-        ~applyCCProfile.value(step.profile);
-
-        // Schedule the next step
-        SystemClock.sched(step.duration, {
-            if(~ccProfileSequenceActive) {
-                ~currentCCProfileSequenceIndex =
-                    (~currentCCProfileSequenceIndex + 1) % ~ccProfileSequence.size;
-                ~playCCProfileSequenceStep.value;
-            };
-            nil;
-        });
-    };
-};
-
-// Set the initial CC profile
-~currentCCProfile = \default;
-~applyCCProfile.value(~currentCCProfile);
-
-// =====================================================================
-// Example profile sequence
-// =====================================================================
-
-// Create a sample CC profile sequence
-~createCCProfileSequence.value([\default, \gentle, \intense, \pulsing], [8, 10, 5, 12]);
-
-"  ~listCCProfiles.value - List available CC profiles".postln;
-"  ~applyCCProfile.(\profileName) - Apply a CC profile".postln;
-"  ~saveCurrentCCProfile.(\newName) - Save current settings as a profile".postln;
-"  ~startCCProfileSequence.value - Start cycling through CC profiles".postln;
-"  ~stopCCProfileSequence.value - Stop CC profile sequence".postln;
-
-
-// Interface commands for direct control
-// ~playAllMelodiesInSequence.value;  // Play through the entire sequence automatically
 // ~stopAllMelodies.value;
-// ~switchToCycle.value(1);
-// ~stopAllNotes.value;
             ~playMelody.value(\set1);
-
-
 

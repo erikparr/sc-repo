@@ -44,9 +44,9 @@
     ~logCounter = ~logCounter + 1;
 
         // Debug logging (uncomment for debugging)
-		if(~logCounter % 20 == 0) {
-			"Expression OSC: chan: %, cc: %, value: %".format(chanIndex, ccNum, exprValue).postln;
-		};
+		// if(~logCounter % 20 == 0) {
+		// 	"Expression OSC: chan: %, cc: %, value: %".format(chanIndex, ccNum, exprValue).postln;
+		// };
     };
 }, '/expression', s.addr);
 

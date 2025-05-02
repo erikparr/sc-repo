@@ -56,9 +56,10 @@
 
 // ===== OSC RESPONDER SETUP =====
 
-// Remove any existing OSC responders for chord bend
+// Remove any existing OSC responders for chord bend to avoid duplicates
 OSCdef(\chordNoteOn).free;
 OSCdef(\chordNoteOff).free;
+OSCdef(\chordRelease).free;
 
 // OSC responder for playing chord notes
 OSCdef(\chordNoteOn, { |msg, time, addr, recvPort|
@@ -78,6 +79,7 @@ OSCdef(\chordNoteOn, { |msg, time, addr, recvPort|
     var bendValue = ~calcBendValue.(bendPercent);
     var bendSynth, ccSynth;
     var noteKey;
+    
     if(vst.notNil) {
         // Log the action
         ("Chord " ++ chordId ++ " - Tuba " ++ vstIndex ++ " playing note: " ++ note).postln;
@@ -85,9 +87,26 @@ OSCdef(\chordNoteOn, { |msg, time, addr, recvPort|
         // Send note on to VST
         vst.midi.noteOn(vstIndex, note, velocity);
         
-        // Store the note data in the global registry with the chord ID
+        // Initialize registry if needed
         if(~chordNoteRegistry.isNil) { ~chordNoteRegistry = Dictionary.new };
-         noteKey = chordId ++ "_" ++ vstIndex;
+        
+        // Create a unique key for this note
+        noteKey = chordId ++ "_" ++ vstIndex;
+        
+        // If a note with this key already exists, release it first
+        if(~chordNoteRegistry[noteKey].notNil) {
+            var oldData = ~chordNoteRegistry[noteKey];
+            ("Cleaning up existing note: " ++ oldData.note).postln;
+            
+            // Release the old note
+            oldData.vst.midi.noteOff(oldData.vstIndex, oldData.note, 0);
+            
+            // Free any associated synths
+            if(oldData.bendSynth.notNil) { oldData.bendSynth.free; };
+            if(oldData.ccSynth.notNil) { oldData.ccSynth.free; };
+        };
+        
+        // Store the note data in the global registry with the chord ID
         ~chordNoteRegistry[noteKey] = (
             chordId: chordId,
             vstIndex: vstIndex,
@@ -95,40 +114,53 @@ OSCdef(\chordNoteOn, { |msg, time, addr, recvPort|
             vst: vst
         );
         
-        // Create bend envelope synth
-        bendSynth = Synth(\BendEnvelope, [
-            \start, 8192,              // Center
-            \peak, bendValue,          // Calculated bend
-            \end, 8192,                // Return to center
-            \peakTime, bendTime,
-            \returnTime, returnTime,
-            \chanIndex, vstIndex,
-            \peakCurve, curveShape,
-            \returnCurve, curveShape
-        ]);
+        // Create bend envelope synth with proper error handling
+        try {
+            bendSynth = Synth(\BendEnvelope, [
+                \start, 8192,              // Center
+                \peak, bendValue,          // Calculated bend
+                \end, 8192,                // Return to center
+                \peakTime, bendTime,
+                \returnTime, returnTime,
+                \chanIndex, vstIndex,
+                \peakCurve, curveShape,
+                \returnCurve, curveShape
+            ]);
+            
+            // Store the synth in the registry
+            ~chordNoteRegistry[noteKey].bendSynth = bendSynth;
+        } { |error|
+            ("Error creating bend synth: " ++ error.errorString).postln;
+        };
         
-        // Create CC envelope synth
-        ccSynth = Synth(\ccEnvelope, [
-            \start, 0,
-            \peak, ccLevel,
-            \end, 0,
-            \attackTime, bendTime,     // Same timing as bend
-            \releaseTime, returnTime,  // Same timing as bend
-            \chanIndex, vstIndex,
-            \ccNum, 17,                // Expression control CC number
-            \attackCurve, curveShape,
-            \releaseCurve, curveShape
-        ]);
-        
-        // Store synth references in the registry
-        ~chordNoteRegistry[noteKey].bendSynth = bendSynth;
-        ~chordNoteRegistry[noteKey].ccSynth = ccSynth;
+        // Create CC envelope synth with proper error handling
+        try {
+            ccSynth = Synth(\ccEnvelope, [
+                \start, 0,
+                \peak, ccLevel,
+                \end, 0,
+                \attackTime, bendTime,     // Same timing as bend
+                \releaseTime, returnTime,  // Same timing as bend
+                \chanIndex, vstIndex,
+                \ccNum, 17,                // Expression control CC number
+                \attackCurve, curveShape,
+                \releaseCurve, curveShape
+            ]);
+            
+            // Store the synth in the registry
+            ~chordNoteRegistry[noteKey].ccSynth = ccSynth;
+        } { |error|
+            ("Error creating CC synth: " ++ error.errorString).postln;
+        };
         
         // Schedule auto-release if duration is provided
         if(duration > 0) {
             SystemClock.sched(duration, {
-                // Auto-release after duration
-                NetAddr.localAddr.sendMsg('/chord/noteOff', chordId, vstIndex, note);
+                // Only auto-release if the note is still in the registry
+                if(~chordNoteRegistry[noteKey].notNil) {
+                    // Auto-release after duration
+                    NetAddr.localAddr.sendMsg('/chord/noteOff', chordId, vstIndex, note);
+                };
                 nil; // Don't reschedule
             });
         };
@@ -148,22 +180,50 @@ OSCdef(\chordNoteOff, { |msg, time, addr, recvPort|
     if(~chordNoteRegistry.notNil && ~chordNoteRegistry[noteKey].notNil) {
         var noteData = ~chordNoteRegistry[noteKey];
         
-        // Release the note
-        ("Chord " ++ chordId ++ " - Releasing tuba " ++ vstIndex ++ " note " ++ note).postln;
-        noteData.vst.midi.noteOff(vstIndex, note, 0);
-        
-        // Free any associated synths
-        if(noteData.bendSynth.notNil) {
-            noteData.bendSynth.free;
+        // Release the note with error handling
+        try {
+            ("Chord " ++ chordId ++ " - Releasing tuba " ++ vstIndex ++ " note " ++ note).postln;
+            noteData.vst.midi.noteOff(vstIndex, note, 0);
+        } { |error|
+            ("Error releasing note: " ++ error.errorString).postln;
+            // Send all-notes-off as a failsafe
+            noteData.vst.midi.allNotesOff(vstIndex);
         };
+        
+        // Free any associated synths with error handling
+        if(noteData.bendSynth.notNil) {
+            try {
+                noteData.bendSynth.free;
+            } { |error|
+                ("Error freeing bend synth: " ++ error.errorString).postln;
+            };
+        };
+        
         if(noteData.ccSynth.notNil) {
-            noteData.ccSynth.free;
+            try {
+                noteData.ccSynth.free;
+            } { |error|
+                ("Error freeing CC synth: " ++ error.errorString).postln;
+            };
         };
         
         // Remove from registry
         ~chordNoteRegistry.removeAt(noteKey);
     } {
         ("WARNING: Note not found in registry: " ++ noteKey).postln;
+        
+        // Try to release the note anyway as a failsafe
+        try {
+            var vstKey = ("vsti" ++ vstIndex).asSymbol;
+            var vst = ~vstList[vstKey];
+            
+            if(vst.notNil) {
+                ("Failsafe release for tuba " ++ vstIndex ++ " note " ++ note).postln;
+                vst.midi.noteOff(vstIndex, note, 0);
+            };
+        } { |error|
+            ("Error in failsafe release: " ++ error.errorString).postln;
+        };
     };
 }, '/chord/noteOff');
 
@@ -174,18 +234,35 @@ OSCdef(\chordRelease, { |msg, time, addr, recvPort|
     
     // Find all notes for this chord ID
     if(~chordNoteRegistry.notNil) {
+        ("Processing release for chord " ++ chordId).postln;
+        
         ~chordNoteRegistry.keysValuesDo { |key, noteData|
             if(noteData.chordId == chordId) {
-                // Release the note
-                ("Releasing chord " ++ chordId ++ " - Tuba " ++ noteData.vstIndex ++ " note " ++ noteData.note).postln;
-                noteData.vst.midi.noteOff(noteData.vstIndex, noteData.note, 0);
-                
-                // Free any associated synths
-                if(noteData.bendSynth.notNil) {
-                    noteData.bendSynth.free;
+                // Release the note with error handling
+                try {
+                    ("Releasing chord " ++ chordId ++ " - Tuba " ++ noteData.vstIndex ++ " note " ++ noteData.note).postln;
+                    noteData.vst.midi.noteOff(noteData.vstIndex, noteData.note, 0);
+                } { |error|
+                    ("Error releasing note: " ++ error.errorString).postln;
+                    // Send all-notes-off as a failsafe
+                    noteData.vst.midi.allNotesOff(noteData.vstIndex);
                 };
+                
+                // Free any associated synths with error handling
+                if(noteData.bendSynth.notNil) {
+                    try {
+                        noteData.bendSynth.free;
+                    } { |error|
+                        ("Error freeing bend synth: " ++ error.errorString).postln;
+                    };
+                };
+                
                 if(noteData.ccSynth.notNil) {
-                    noteData.ccSynth.free;
+                    try {
+                        noteData.ccSynth.free;
+                    } { |error|
+                        ("Error freeing CC synth: " ++ error.errorString).postln;
+                    };
                 };
                 
                 // Mark for removal
@@ -207,113 +284,129 @@ if(~chordNoteRegistry.isNil) { ~chordNoteRegistry = Dictionary.new };
 
 // ===== PROCMOD IMPLEMENTATION =====
 
-// Create a ProcMod for the chord bend
-~chordProcMod = ProcMod.new(
-    Env([0, 1, 1, 0], [0.1, ~params.duration - 0.6, 0.5], \sin, 2),
-    1.0,              // Amplitude
-    \chordBend,       // ID
-    nil,              // Group (create new)
-    0,                // addAction
-    1,                // target
+// Function to create a fresh ProcMod for the chord bend
+~createChordProcMod = {
+    ProcMod.new(
+        Env([0, 1, 1, 0], [0.1, ~params.duration - 0.6, 0.5], \sin, 2),
+        1.0,              // Amplitude
+        \chordBend,       // ID
+        nil,              // Group (create new)
+        0,                // addAction
+        1,                // target
 
-    // Main function - will be called when ProcMod is played
-    { |group, envbus, server|
-        var chordId = "chord_" ++ Main.elapsedTime.round(0.001);
-        var result;
+        // Main function - will be called when ProcMod is played
+        { |group, envbus, server|
+            var chordId = "chord_" ++ Main.elapsedTime.round(0.001);
+            var result;
 
-        // Recalculate timing based on current duration
-        ~calculateEnvelopeTiming.value;
-        
-        // Store the chordId for this instance
-        ~currentChordId = chordId;
-        
-        // Log start time and chord ID
-        ("Starting chord bend " ++ chordId ++ " with duration " ++ ~params.duration).postln;
-
-        // Play each note in the chord via OSC
-        3.do { |i|
-            var note = ~params.chord[i];
-            var bendPercent = ~params.bendPercents[i];
-            var ccLevel = ~params.ccLevels[i];
+            // Recalculate timing based on current duration
+            ~calculateEnvelopeTiming.value;
             
-            // Send OSC message to play this note
-            NetAddr.localAddr.sendMsg(
-                '/chord/noteOn', 
-                chordId,             // Unique ID for this chord
-                i,                   // VST index
-                note,                // MIDI note
-                100,                 // Velocity
-                bendPercent,         // Bend percentage
-                ccLevel,             // CC level
-                ~params.duration,    // Duration
-                ~params.curveShape,  // Curve shape
-                ~params.bendTime,    // Bend time
-                ~params.returnTime   // Return time
-            );
-        };
-
-        // Return a task that completes when everything is done
-        result = Task({
-            // Wait for the full duration plus a small buffer
-            (~params.duration + 0.5).wait;
+            // Store the chordId for this instance
+            ~currentChordId = chordId;
             
-            // Don't release notes here - that should happen in onRelease or through auto-release
-            ("Chord bend " ++ chordId ++ " task completed").postln;
-        });
+            // Log start time and chord ID
+            ("Starting chord bend " ++ chordId ++ " with duration " ++ ~params.duration).postln;
 
-        result;
-    },
-
-    // Release function - runs after the ProcMod has fully released
-    { |group, envbus|
-        var chordId = ~currentChordId;
-        
-        if(chordId.notNil) {
-            ("Chord bend " ++ chordId ++ " completed").postln;
-            ~currentChordId = nil; // Clear the reference
-        } {
-            "Chord bend completed (no ID)".postln;
-        };
-    },
-
-    // onReleaseFunc - runs when release is triggered
-    { |group, envbus|
-        var chordId = ~currentChordId;
-        
-        if(chordId.notNil) {
-            ("Releasing chord bend " ++ chordId).postln;
-            
-            // Send OSC message to release the entire chord
-            NetAddr.localAddr.sendMsg('/chord/release', chordId);
-        } {
-            "Warning: Releasing chord bend with no ID".postln;
-            
-            // Fallback: if no chord ID, try to release any active notes
-            if(~chordNoteRegistry.notNil && ~chordNoteRegistry.size > 0) {
-                "Attempting to release all registered chord notes...".postln;
-                ~chordNoteRegistry.keysValuesDo { |key, noteData|
-                    noteData.vst.midi.noteOff(noteData.vstIndex, noteData.note, 0);
-                    if(noteData.bendSynth.notNil) { noteData.bendSynth.free; };
-                    if(noteData.ccSynth.notNil) { noteData.ccSynth.free; };
-                };
-                ~chordNoteRegistry.clear;
+            // Play each note in the chord via OSC
+            3.do { |i|
+                var note = ~params.chord[i];
+                var bendPercent = ~params.bendPercents[i];
+                var ccLevel = ~params.ccLevels[i];
+                
+                // Send OSC message to play this note
+                NetAddr.localAddr.sendMsg(
+                    '/chord/noteOn', 
+                    chordId,             // Unique ID for this chord
+                    i,                   // VST index
+                    note,                // MIDI note
+                    100,                 // Velocity
+                    bendPercent,         // Bend percentage
+                    ccLevel,             // CC level
+                    ~params.duration,    // Duration
+                    ~params.curveShape,  // Curve shape
+                    ~params.bendTime,    // Bend time
+                    ~params.returnTime   // Return time
+                );
             };
-        };
-    }
-);
+
+            // Return a task that completes when everything is done
+            result = Task({
+                // Wait for the full duration plus a small buffer
+                (~params.duration + 0.5).wait;
+                
+                // Don't release notes here - that should happen in onRelease or through auto-release
+                ("Chord bend " ++ chordId ++ " task completed").postln;
+            });
+
+            result;
+        },
+
+        // Release function - runs after the ProcMod has fully released
+        { |group, envbus|
+            var chordId = ~currentChordId;
+            
+            if(chordId.notNil) {
+                ("Chord bend " ++ chordId ++ " completed").postln;
+                ~currentChordId = nil; // Clear the reference
+            } {
+                "Chord bend completed (no ID)".postln;
+            };
+        },
+
+        // onReleaseFunc - runs when release is triggered
+        { |group, envbus|
+            var chordId = ~currentChordId;
+            
+            if(chordId.notNil) {
+                ("Releasing chord bend " ++ chordId).postln;
+                
+                // Send OSC message to release the entire chord
+                NetAddr.localAddr.sendMsg('/chord/release', chordId);
+            } {
+                "Warning: Releasing chord bend with no ID".postln;
+                
+                // Fallback: if no chord ID, try to release any active notes
+                if(~chordNoteRegistry.notNil && ~chordNoteRegistry.size > 0) {
+                    "Attempting to release all registered chord notes...".postln;
+                    ~chordNoteRegistry.keysValuesDo { |key, noteData|
+                        noteData.vst.midi.noteOff(noteData.vstIndex, noteData.note, 0);
+                        if(noteData.bendSynth.notNil) { noteData.bendSynth.free; };
+                        if(noteData.ccSynth.notNil) { noteData.ccSynth.free; };
+                    };
+                    ~chordNoteRegistry.clear;
+                };
+            };
+        }
+    );
+};
 
 // ===== PLAYBACK CONTROL FUNCTIONS =====
 
-// Play the chord
+// Store the active ProcMod
+~activeChordProcMod = nil;
+
+// Play the chord - now creates a fresh ProcMod instance each time
 ~playChord = {
     "Playing chord with bend".postln;
-    ~chordProcMod.play;
+    
+    // Release any existing chord ProcMod
+    if(~activeChordProcMod.notNil) {
+        "Releasing previous chord ProcMod".postln;
+        ~activeChordProcMod.release;
+    };
+    
+    // Create a fresh ProcMod and play it
+    ~activeChordProcMod = ~createChordProcMod.value;
+    ~activeChordProcMod.play;
 };
 
 // Release the chord
 ~releaseChord = {
     "Releasing chord".postln;
-    ~chordProcMod.release;
+    if(~activeChordProcMod.notNil && ~activeChordProcMod.isRunning) {
+        ~activeChordProcMod.release;
+    };
 };
 
 // Function to clean up all chord notes regardless of state
@@ -322,24 +415,59 @@ if(~chordNoteRegistry.isNil) { ~chordNoteRegistry = Dictionary.new };
     
     // Clear any existing notes in the registry
     if(~chordNoteRegistry.notNil) {
+        var count = 0;
+        
         ~chordNoteRegistry.keysValuesDo { |key, noteData|
-            // Release the note
-            ("Cleaning up: Tuba " ++ noteData.vstIndex ++ " note " ++ noteData.note).postln;
-            noteData.vst.midi.noteOff(noteData.vstIndex, noteData.note, 0);
+            // Increment count for logging
+            count = count + 1;
             
-            // Free any associated synths
-            if(noteData.bendSynth.notNil) { noteData.bendSynth.free; };
-            if(noteData.ccSynth.notNil) { noteData.ccSynth.free; };
+            // Release the note with error handling
+            try {
+                ("Cleaning up: Tuba " ++ noteData.vstIndex ++ " note " ++ noteData.note).postln;
+                noteData.vst.midi.noteOff(noteData.vstIndex, noteData.note, 0);
+            } { |error|
+                ("Error releasing note: " ++ error.errorString).postln;
+            };
+            
+            // Free any associated synths with error handling
+            if(noteData.bendSynth.notNil) {
+                try {
+                    noteData.bendSynth.free;
+                } { |error|
+                    ("Error freeing bend synth: " ++ error.errorString).postln;
+                };
+            };
+            
+            if(noteData.ccSynth.notNil) {
+                try {
+                    noteData.ccSynth.free;
+                } { |error|
+                    ("Error freeing CC synth: " ++ error.errorString).postln;
+                };
+            };
         };
+        
+        // Clear the registry after processing all entries
         ~chordNoteRegistry.clear;
+        
+        ("Cleaned up " ++ count ++ " chord notes from registry").postln;
     };
     
     // All-notes-off message to all VSTs as a failsafe
     ~vstList.do { |vst, i|
         5.do { |chan|
-            vst.midi.allNotesOff(chan);
+            try {
+                vst.midi.allNotesOff(chan);
+            } { |error|
+                ("Error sending all-notes-off: " ++ error.errorString).postln;
+            };
         };
     };
+    
+    // Reset the current chord ID as well
+    ~currentChordId = nil;
+    
+    "Chord cleanup completed".postln;
 };
 
 // Function to update parameters
