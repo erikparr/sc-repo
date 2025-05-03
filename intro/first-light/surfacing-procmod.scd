@@ -13,7 +13,7 @@
 ~bpm = 298;
 ~noteDuration = 0.2;
 ~noteRest = 0.2;
-~melodyRest = 4.47;
+~melodyRest = 0.025;
 ~fermataReleaseRest = 0.25;
 
 // Flags for different behavior modes
@@ -459,11 +459,23 @@
     )
 ));
 
+~melodyDict.put(\loop1, (
+    name: "Tuba Melody XI",
+    patterns: [
+        [94,89,66],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 1.0
+    )
+));
+
 // Define development cycles
 ~developmentCycles = Dictionary.new;
 ~developmentCycles.put(1, (
     name: "Initial Cycle",
-    sequence: [\set1, \set1, \set1, \set1]
+    sequence: [\loop1]
+	// sequence: [\set1, \set1, \set1, \set1]
 	// sequence: [\set1, \set1, \set1, \set1, \set3, \set3, \set5, \set5, \set6, \set6, \set7, \set7, \set1, \set1]
 ));
 
@@ -600,7 +612,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
     var id = (melodyKey ++ "_" ++ patternIndex).asSymbol;
 
     // Create an amplitude envelope without a release node
-    var env = Env([0, 1, 1, 0], [0.1, pattern.size * ~noteRest, 0.3], \sin);
+    var env = Env([0, 1, 1, 0], [0.1, pattern.size * ~noteRest, 0.01], \sin);
 
     // Create the ProcMod for this melody
     ProcMod.new(
@@ -624,12 +636,15 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
             var noteDuration = ~noteDuration;
             var noteRestTime = ~noteRest;
             var temporalAccent = 1.5;
+            var lastNoteDurationScalar = 1.0; // Default: no change to last note
 
             // Use MIDI controller values if available
             if(~midiController.notNil) {
                 noteDuration = ~midiController.getSliderValue(1).linlin(0, 127, 0.001, 0.3);
                 noteRestTime = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
-                temporalAccent = ~midiController.getSliderValue(5).linlin(0, 127, 0.75, 2);
+                temporalAccent = ~midiController.getSliderValue(5).linlin(0, 127, 0.75, 4);
+                // Use Slider 6 for last note duration scalar (100% to 200%)
+                lastNoteDurationScalar = ~midiController.getSliderValue(6).linlin(0, 127, 1.0, 2.0);
             };
 
             // Store the ID of the active melody
@@ -656,18 +671,48 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                         // Process the note (apply offset, etc.)
                         processedNote = ~processNote.value(note, isFirstNote, isLastNote, melodyKey);
 
-                        // Adjust duration for first note accent
-                        actualDuration = if(isFirstNote, {
-                            noteDuration * temporalAccent
-                        }, {
-                            noteDuration
-                        });
+                        // Calculate note duration based on position in melody - clear if/else structure
+                        if(isFirstNote) {
+                            // Only first note gets temporal accent
+                            actualDuration = noteDuration * 1;
+                        } {
+                            if(isLastNote) {
+                                // Only last note gets the last note duration scalar
+                                actualDuration = noteDuration * lastNoteDurationScalar;
+                            } {
+                                // Middle notes get the base duration with no modifier
+                                actualDuration = noteDuration;
+                            };
+                        };
+
+                        // Debug the duration calculation
+                        ["DEBUG - Duration calculation:",
+                            "note:", processedNote[0],
+                            "isFirst:", isFirstNote,
+                            "isLast:", isLastNote,
+                            "baseDur:", noteDuration,
+                            "actualDur:", actualDuration,
+                            if(isFirstNote, {"accentMult:" ++ temporalAccent}, {""}),
+                            if(isLastNote, {"lastNoteMult:" ++ lastNoteDurationScalar}, {""})
+                        ].postln;
+
+                        // Store last note duration for loop timing adjustment
+                        if(isLastNote) {
+                            ~lastNoteDuration = actualDuration;
+                            ["Setting ~lastNoteDuration to:", ~lastNoteDuration].postln;
+                        };
 
                         // Make sure duration doesn't exceed rest time
                         if(isFermata.not) {
-                            var maxDuration = noteRestTime * 0.9;
-                            if(actualDuration > maxDuration) {
-                                actualDuration = maxDuration;
+                            if(isLastNote) {
+                                // For last note, allow any duration - no cap
+                                // The loop will adjust timing to accommodate it
+                            }  {
+                                // For other notes, keep the normal cap
+                                var maxDuration = noteRestTime * 0.9;
+                                if(actualDuration > maxDuration) {
+                                    actualDuration = maxDuration;
+                                };
                             };
                         };
 
@@ -680,8 +725,10 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 
                         // Play the note with OSC
                         ["Playing note:", processedNote[0], "duration:", actualDuration,
-                         "noteIndex:", noteIndex, "fermata:", isFermata,
-                         "first:", isFirstNote, "last:", isLastNote].postln;
+                            "noteIndex:", noteIndex, "fermata:", isFermata,
+                            "first:", isFirstNote, "last:", isLastNote,
+                            if(isLastNote, {"lastNoteScalar:" ++ lastNoteDurationScalar}, {""})
+                        ].postln;
 
                         NetAddr.localAddr.sendMsg('/note/on', 0, processedNote[0], processedNote[1],
                             actualDuration, isFermata.asInteger,
@@ -812,7 +859,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
             pattern = ~melodyDict[currentMelodyKey].patterns[0];
             noteCount = if(~modes.removeLast, {pattern.size - 1}, {pattern.size});
             melodyDuration = noteCount * ~noteRest * ~repetitions;
-            totalWaitTime = melodyDuration + ~melodyRest + 0.5; // Add a small buffer
+            totalWaitTime = melodyDuration + ~melodyRest + 0.1; // Add a small buffer
 
             ["Waiting for melody to complete:", totalWaitTime, "seconds"].postln;
             totalWaitTime.wait;
@@ -1056,5 +1103,125 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
     };
 };
 // ~stopAllMelodies.value;
-            ~playMelody.value(\set1);
+//
 
+// ~playAllMelodiesInSequence.value;
+
+
+// =====================================================================
+// Looping Melody Functionality
+// =====================================================================
+
+// Variable to track looping state
+~loopingMelody = false;
+~loopingMelodyKey = nil;
+~loopingTask = nil;
+
+// Function to start looping a specific melody
+~startLoopingMelody = { |melodyKey|
+    var pattern, noteCount, melodyDuration, totalWaitTime, currentNoteRest;
+    // Initialize last note duration tracking
+    ~lastNoteDuration = nil;
+
+    // Stop any currently playing melody or loop
+    ~stopLoopingMelody.value;
+    ~stopAllMelodies.value;
+
+    // Set looping state
+    ~loopingMelody = true;
+    ~loopingMelodyKey = melodyKey;
+
+    // Debug: Log current noteRest value
+    ["DEBUG: Current ~noteRest value:", ~noteRest].postln;
+
+    // Get pattern info once (doesn't change)
+    pattern = ~melodyDict[melodyKey].patterns[0];
+    noteCount = if(~modes.removeLast, {pattern.size - 1}, {pattern.size});
+
+    ["Starting loop of melody:", melodyKey, "with", noteCount, "notes"].postln;
+
+    // Create a task that will keep playing the melody
+    ~loopingTask = Task({
+        var proc;
+
+        while({ ~loopingMelody }) {
+            // Read the current MIDI controller values on each iteration
+            currentNoteRest = ~noteRest; // Default value
+            if(~midiController.notNil) {
+                currentNoteRest = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
+                ["DEBUG: Using MIDI-controlled noteRest:", currentNoteRest].postln;
+            };
+
+            // Calculate duration based on current settings
+            if(~lastNoteDuration.notNil) {
+                // If we know the last note's duration, use it for more precise timing
+                // Calculate wait time based on (n-1) regular notes + actual last note duration
+                melodyDuration = (noteCount - 1) * currentNoteRest + ~lastNoteDuration;
+                ["Using precise timing with last note duration:", ~lastNoteDuration].postln;
+            } {
+                // First time through, use standard calculation
+                melodyDuration = noteCount * currentNoteRest;
+            };
+
+            totalWaitTime = melodyDuration; // No buffer needed
+
+            // Add melody rest if enabled (only if actually needed)
+            if(~modes.melodyRest) {
+                totalWaitTime = totalWaitTime + ~melodyRest;
+                // Add fermata release rest if applicable
+                if(~modes.fermata) {
+                    totalWaitTime = totalWaitTime + ~fermataReleaseRest;
+                };
+            };
+
+            ["Iteration timing: noteRest:", currentNoteRest,
+             "lastNoteDur:", if(~lastNoteDuration.notNil, {~lastNoteDuration}, {"unknown"}),
+             "totalWaitTime:", totalWaitTime].postln;
+
+            // Create a new ProcMod instance for this iteration
+            proc = ~createMelodyProc.value(melodyKey);
+            ~melodyProcs[melodyKey] = proc;
+
+            // Start CC envelopes for this melody based on mode
+            if(~loopingCCEnvelopes) {
+                ~startLoopingCCEnvelopes.value(melodyKey);
+            } {
+                ~startCCEnvelopesOnChannel0.value(melodyKey);
+            };
+
+            // Play immediately without delay
+            ["Playing melody iteration:", melodyKey].postln;
+            proc.play;
+
+            // Wait for melody to complete before playing again
+            ["Waiting", totalWaitTime, "seconds before next iteration"].postln;
+            totalWaitTime.wait;
+        };
+    }).play;
+};
+
+// Function to stop looping
+~stopLoopingMelody = {
+    if(~loopingMelody) {
+        ["Stopping loop of melody:", ~loopingMelodyKey].postln;
+        ~loopingMelody = false;
+
+        // Stop the looping task
+        if(~loopingTask.notNil) {
+            ~loopingTask.stop;
+            ~loopingTask = nil;
+        };
+
+        ~loopingMelodyKey = nil;
+
+        // Optionally stop the currently playing melody
+        // ~stopAllMelodies.value;
+    };
+};
+// ~startLoopingMelody.value(\loop1);
+// ~stopLoopingMelody.value;
+// Example usage:
+// ~startLoopingMelody.value(\set1);  // Start looping melody set1
+// ~stopLoopingMelody.value;          // Stop the loop
+// ~playAllMelodiesInSequence.value;
+// ~playMelody.value(\set1);
