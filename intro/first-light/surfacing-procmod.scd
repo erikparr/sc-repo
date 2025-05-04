@@ -4,6 +4,128 @@
 // Load the setup files
 // (PathName(thisProcess.nowExecutingPath).pathOnly ++ "setup/_setup-loader-soloTuba.scd").load;
 
+// MIDI Button Controls Setup - implement proper toggle behavior
+// Track last button state to implement toggle logic
+~lastButtonState = Dictionary.new;
+~toggleMelodyRest.free;
+~toggleMelodyRest = MIDIdef.cc(\toggleMelodyRest, { |val, ccNum, chan, src|
+    var buttonPressed = val > 0;
+    var lastState = ~lastButtonState[ccNum] ? false;
+
+    // Only toggle on rising edge (0->127, button press)
+    // Ignore falling edge (127->0, button release)
+    if(buttonPressed && (lastState == false)) {
+        // Toggle the melody rest mode
+        ~modes.melodyRestMode = ~modes.melodyRestMode.not;
+
+        // Provide immediate feedback about the new state
+        ["MIDI Button CC 45: Melody Rest mode",
+            if(~modes.melodyRestMode, "ENABLED", "DISABLED"),
+            "- Will take effect on next loop cycle"].postln;
+    };
+
+    // Remember current state for next time
+    ~lastButtonState[ccNum] = buttonPressed;
+
+}, 45);  // CC 45 for the button
+
+// Add pause notes toggle control
+~togglePauseNotes.free;
+~togglePauseNotes = MIDIdef.cc(\togglePauseNotes, { |val, ccNum, chan, src|
+    var buttonPressed = val > 0;
+    var lastState = ~lastButtonState[ccNum] ? false;
+
+    // Only toggle on rising edge (0->127, button press)
+    // Ignore falling edge (127->0, button release)
+    if(buttonPressed && (lastState == false)) {
+        // Toggle the pause notes mode
+        ~modes.pauseNotesMode = ~modes.pauseNotesMode.not;
+
+        // Provide immediate feedback about the new state
+        ["MIDI Button CC 41: Pause Notes toggled to",
+            if(~modes.pauseNotesMode, "ON", "OFF"),
+            "- Will take effect on next loop cycle"].postln;
+    };
+
+    // Remember current state for next time
+    ~lastButtonState[ccNum] = buttonPressed;
+
+}, 41);  // CC 41 for the button
+
+
+// Add next cycle control
+~nextCycle.free;
+~nextCycle = MIDIdef.cc(\nextCycle, { |val, ccNum, chan, src|
+    var buttonPressed = val > 0;
+    var lastState = ~lastButtonState[ccNum] ? false;
+
+    // Only act on rising edge (0->127, button press)
+    // Ignore falling edge (127->0, button release)
+    if(buttonPressed && (lastState == false)) {
+        var nextCycle = ~currentCycle + 1;
+        var numCycles = ~developmentCycles.size;
+
+        // Wrap around if we go past the last cycle
+        if(nextCycle > numCycles) {
+            nextCycle = 1;
+        };
+
+        // Only switch if there's actually a change
+        if(nextCycle != ~currentCycle) {
+            // Provide feedback before switching
+            ["MIDI Button CC 59: Switching from cycle", ~currentCycle, "(", ~developmentCycles[~currentCycle].name, ")",
+             "to cycle", nextCycle, "(", ~developmentCycles[nextCycle].name, ")",
+             "- Will take effect on next loop cycle"].postln;
+
+            // Switch to the next cycle
+            ~switchCycle.value(nextCycle);
+
+            // Reset to beginning of sequence
+            ~currentMelodySetIndex = 0;
+        };
+    };
+
+    // Remember current state for next time
+    ~lastButtonState[ccNum] = buttonPressed;
+
+}, 59);  // CC 59 for next cycle
+
+~prevCycle.free;
+// Add previous cycle control
+~prevCycle = MIDIdef.cc(\prevCycle, { |val, ccNum, chan, src|
+    var buttonPressed = val > 0;
+    var lastState = ~lastButtonState[ccNum] ? false;
+
+    // Only act on rising edge (0->127, button press)
+    // Ignore falling edge (127->0, button release)
+    if(buttonPressed && (lastState == false)) {
+        var prevCycle = ~currentCycle - 1;
+        var numCycles = ~developmentCycles.size;
+
+        // Wrap around if we go below the first cycle
+        if(prevCycle < 1) {
+            prevCycle = numCycles;
+        };
+
+        // Only switch if there's actually a change
+        if(prevCycle != ~currentCycle) {
+            // Provide feedback before switching
+            ["MIDI Button CC 58: Switching from cycle", ~currentCycle, "(", ~developmentCycles[~currentCycle].name, ")",
+             "to cycle", prevCycle, "(", ~developmentCycles[prevCycle].name, ")",
+             "- Will take effect on next loop cycle"].postln;
+
+            // Switch to the previous cycle
+            ~switchCycle.value(prevCycle);
+
+            // Reset to beginning of sequence
+            ~currentMelodySetIndex = 0;
+        };
+    };
+
+    // Remember current state for next time
+    ~lastButtonState[ccNum] = buttonPressed;
+
+}, 58);  // CC 58 for previous cycle
 
 // =====================================================================
 // Global variables and settings
@@ -13,17 +135,18 @@
 ~bpm = 298;
 ~noteDuration = 0.2;
 ~noteRest = 0.2;
-~melodyRest = 0.025;
+~melodyRestTime = 0.025;  // Renamed from ~melodyRest for clarity
 ~fermataReleaseRest = 0.25;
 
 // Flags for different behavior modes
 ~modes = (
-    melodyRest: false,        // Enable longer rests between melodies
+    melodyRestMode: false,        // Enable longer rests between melodies (renamed from melodyRest)
     fermata: false,          // Hold the last note of each melody
     rampTempo: false,        // Progressively change note rest times
     velocityMultiply: false, // Apply velocity multipliers to first/last notes
     noteOffset: true,        // Apply note offset to all notes
-    removeLast: false        // Skip the last note in each melody
+    removeLast: false,       // Skip the last note in each melody
+    pauseNotesMode: false    // When true, stop triggering new notes (toggled by CC 41)
 );
 
 // Control parameters
@@ -46,8 +169,8 @@
     expressionPeakPos: 0.6,       // Position of peak in the envelope (0.0-1.0)
 
     // Time factors relative to melody duration
-    attackFactor: 0.4,            // Portion of melody duration for attack
-    decayFactor: 0.6,             // Portion of melody duration for decay
+    attackFactor: 0.9,            // Portion of melody duration for attack
+    decayFactor: 0.1,             // Portion of melody duration for decay
 
     // Controls for future additions
     bowPressureCC: 23,            // CC for bow pressure (for future use)
@@ -65,7 +188,7 @@
     var totalNoteDuration = noteCount * ~noteRest * ~repetitions;
 
     // If we have melody rests, include those in the envelope duration
-    totalNoteDuration + (if(~modes.melodyRest, {~melodyRest}, {0}));
+    totalNoteDuration + (if(~modes.melodyRestMode, {~melodyRestTime}, {0}));
 };
 
 // Function to create Env for a CC over time
@@ -455,7 +578,7 @@
     ],
     velocityMultipliers: (
         first: 1.0,
-        last: 1.0
+        last: 2.0
     )
 ));
 
@@ -466,17 +589,149 @@
     ],
     velocityMultipliers: (
         first: 1.0,
-        last: 1.0
-    )
+        last: 2.0
+    ),
+    loopCount: 1
 ));
+~melodyDict.put(\loop1a, (
+    name: "Tuba Melody XI",
+    patterns: [
+        [89,94,66],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 2.0
+    ),
+    loopCount: 1
+));
+
+~melodyDict.put(\loop2, (
+    name: "Tuba Melody XII",
+    patterns: [
+        [94, 89, 82],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 2.0
+    ),
+    loopCount: 8
+));
+
+~melodyDict.put(\loop3, (
+    name: "Tuba Melody XIII",
+    patterns: [
+        [94, 89, 78],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 2.0
+    ),
+    loopCount: 8
+));
+
+~melodyDict.put(\loop4, (
+    name: "Tuba Melody XIV",
+    patterns: [
+        [94, 89, 77],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 2.0
+    ),
+    loopCount: 8
+));
+
+~melodyDict.put(\loop5, (
+    name: "Tuba Melody XV",
+    patterns: [
+        [94, 89, 73],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 2.0
+    ),
+    loopCount: 8
+));
+
+~melodyDict.put(\loop6, (
+    name: "Tuba Melody XVI",
+    patterns: [
+        [94, 89, 66],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 2.0
+    ),
+    loopCount: 8
+));
+
+~melodyDict.put(\loop7, (
+    name: "Tuba Melody XVII",
+    patterns: [
+        [94, 89, 70],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 2.0
+    ),
+    loopCount: 8
+));
+
+~melodyDict.put(\loop8, (
+    name: "Tuba Melody XVIII",
+    patterns: [
+        [94, 89, 65],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 2.0
+    ),
+    loopCount: 8
+));
+
+
+
+~melodyDict.put(\loop9, (
+    name: "Tuba Melody XI",
+    patterns: [
+        [94,89,61],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 2.0
+    ),
+    loopCount: 1
+));
+~melodyDict.put(\loop9a, (
+    name: "Tuba Melody XI",
+    patterns: [
+        [89,94,61],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 2.0
+    ),
+    loopCount: 1
+));
+
+
+
+
+
+
+
 
 // Define development cycles
 ~developmentCycles = Dictionary.new;
 ~developmentCycles.put(1, (
     name: "Initial Cycle",
-    sequence: [\loop1]
-	// sequence: [\set1, \set1, \set1, \set1]
-	// sequence: [\set1, \set1, \set1, \set1, \set3, \set3, \set5, \set5, \set6, \set6, \set7, \set7, \set1, \set1]
+    sequence: [\loop1, \loop1a]
+));
+
+// Add a second cycle with the new loops
+~developmentCycles.put(2, (
+    name: "Second Cycle",
+    sequence: [\loop9, \loop9a]
 ));
 
 // Initialize the current sequence
@@ -645,6 +900,8 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                 temporalAccent = ~midiController.getSliderValue(5).linlin(0, 127, 0.75, 4);
                 // Use Slider 6 for last note duration scalar (100% to 200%)
                 lastNoteDurationScalar = ~midiController.getSliderValue(6).linlin(0, 127, 1.0, 2.0);
+                // Get melody rest time from slider 4
+                ~melodyRestTime = ~midiController.getSliderValue(4).linlin(0, 127, 0.0, 1.0);
             };
 
             // Store the ID of the active melody
@@ -665,7 +922,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                         var note = pattern[noteIndex];
                         var isFirstNote = (noteIndex == 0);
                         var isLastNote = (noteIndex == (effectiveLength - 1));
-                        var isFermata = isLastNote && ~modes.fermata && ~modes.melodyRest;
+                        var isFermata = isLastNote && ~modes.fermata && ~modes.melodyRestMode;
                         var actualDuration, processedNote;
 
                         // Process the note (apply offset, etc.)
@@ -754,9 +1011,9 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                 };
 
                 // After all repetitions, handle melody rest if enabled
-                if(~modes.melodyRest) {
-                    ["Taking a longer rest between melodies:", ~melodyRest, "seconds"].postln;
-                    ~melodyRest.wait;
+                if(~modes.melodyRestMode) {
+                    ["Taking a longer rest between melodies:", ~melodyRestTime, "seconds (controlled by slider 4)"].postln;
+                    ~melodyRestTime.wait;
 
                     // Release fermata note after melody rest
                     if(~lastFermataNote.notNil) {
@@ -859,7 +1116,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
             pattern = ~melodyDict[currentMelodyKey].patterns[0];
             noteCount = if(~modes.removeLast, {pattern.size - 1}, {pattern.size});
             melodyDuration = noteCount * ~noteRest * ~repetitions;
-            totalWaitTime = melodyDuration + ~melodyRest + 0.1; // Add a small buffer
+            totalWaitTime = melodyDuration + ~melodyRestTime + 0.1; // Add a small buffer
 
             ["Waiting for melody to complete:", totalWaitTime, "seconds"].postln;
             totalWaitTime.wait;
@@ -1120,6 +1377,9 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 // Function to start looping a specific melody
 ~startLoopingMelody = { |melodyKey|
     var pattern, noteCount, melodyDuration, totalWaitTime, currentNoteRest;
+    var initialCycle = ~currentCycle; // Track initial cycle to detect changes
+    var initialMelody = melodyKey;
+
     // Initialize last note duration tracking
     ~lastNoteDuration = nil;
 
@@ -1142,60 +1402,113 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 
     // Create a task that will keep playing the melody
     ~loopingTask = Task({
-        var proc;
+        var proc, isPaused = false, cycleChanged = false;
 
         while({ ~loopingMelody }) {
-            // Read the current MIDI controller values on each iteration
-            currentNoteRest = ~noteRest; // Default value
-            if(~midiController.notNil) {
-                currentNoteRest = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
-                ["DEBUG: Using MIDI-controlled noteRest:", currentNoteRest].postln;
+            // Check if the cycle has changed
+            if(initialCycle != ~currentCycle) {
+                ["Cycle changed from", initialCycle, "to", ~currentCycle,
+                 "- Updating to play from the new sequence"].postln;
+
+                // Get the first melody from the new cycle
+                melodyKey = ~developmentCycles[~currentCycle].sequence[0];
+
+                // Update the pattern info for the new melody
+                pattern = ~melodyDict[melodyKey].patterns[0];
+                noteCount = if(~modes.removeLast, {pattern.size - 1}, {pattern.size});
+
+                // Update tracking variables
+                initialCycle = ~currentCycle;
+                initialMelody = melodyKey;
+                cycleChanged = true;
+
+                ["Now playing melody:", melodyKey, "from cycle:", ~currentCycle].postln;
             };
 
-            // Calculate duration based on current settings
-            if(~lastNoteDuration.notNil) {
-                // If we know the last note's duration, use it for more precise timing
-                // Calculate wait time based on (n-1) regular notes + actual last note duration
-                melodyDuration = (noteCount - 1) * currentNoteRest + ~lastNoteDuration;
-                ["Using precise timing with last note duration:", ~lastNoteDuration].postln;
-            } {
-                // First time through, use standard calculation
-                melodyDuration = noteCount * currentNoteRest;
-            };
-
-            totalWaitTime = melodyDuration; // No buffer needed
-
-            // Add melody rest if enabled (only if actually needed)
-            if(~modes.melodyRest) {
-                totalWaitTime = totalWaitTime + ~melodyRest;
-                // Add fermata release rest if applicable
-                if(~modes.fermata) {
-                    totalWaitTime = totalWaitTime + ~fermataReleaseRest;
+            // Check if we need to pause
+            if(~modes.pauseNotesMode) {
+                // Only print the message once when entering pause mode
+                if(isPaused.not) {
+                    ["PAUSED: Waiting until pause mode is disabled (CC 41)"].postln;
+                    isPaused = true;
                 };
-            };
 
-            ["Iteration timing: noteRest:", currentNoteRest,
-             "lastNoteDur:", if(~lastNoteDuration.notNil, {~lastNoteDuration}, {"unknown"}),
-             "totalWaitTime:", totalWaitTime].postln;
-
-            // Create a new ProcMod instance for this iteration
-            proc = ~createMelodyProc.value(melodyKey);
-            ~melodyProcs[melodyKey] = proc;
-
-            // Start CC envelopes for this melody based on mode
-            if(~loopingCCEnvelopes) {
-                ~startLoopingCCEnvelopes.value(melodyKey);
+                // Wait briefly then check again
+                0.1.wait;
             } {
-                ~startCCEnvelopesOnChannel0.value(melodyKey);
+                // If we're not paused, proceed with normal playback
+
+                // If we were paused and now we're not, print a message
+                if(isPaused) {
+                    ["RESUMING: Pause mode disabled, continuing playback"].postln;
+                    isPaused = false;
+                };
+
+                // If the cycle changed, announce the new melody
+                if(cycleChanged) {
+                    ["Starting new melody:", melodyKey, "from cycle:", ~currentCycle].postln;
+                    cycleChanged = false;
+                };
+
+                // Read the current MIDI controller values on each iteration
+                currentNoteRest = ~noteRest; // Default value
+                if(~midiController.notNil) {
+                    currentNoteRest = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
+                    // Get melody rest time from slider 4
+                    ~melodyRestTime = ~midiController.getSliderValue(4).linlin(0, 127, 0.0, 1.0);
+                    ["DEBUG: Using MIDI-controlled noteRest:", currentNoteRest, "melodyRestTime:", ~melodyRestTime].postln;
+                };
+
+                // Calculate duration based on current settings
+                if(~lastNoteDuration.notNil) {
+                    // If we know the last note's duration, use it for more precise timing
+                    // Calculate wait time based on (n-1) regular notes + actual last note duration
+                    melodyDuration = (noteCount - 1) * currentNoteRest + ~lastNoteDuration;
+                    ["Using precise timing with last note duration:", ~lastNoteDuration].postln;
+                } {
+                    // First time through, use standard calculation
+                    melodyDuration = noteCount * currentNoteRest;
+                };
+
+                totalWaitTime = melodyDuration;
+
+                // Add melody rest if enabled (only if actually needed)
+                // This will check the current value of ~modes.melodyRestMode on each iteration
+                // so button toggles take effect immediately for the next loop cycle
+                if(~modes.melodyRestMode) {
+                    ["Adding melody rest of", ~melodyRestTime, "seconds (CC 45 is ON)"].postln;
+                    totalWaitTime = totalWaitTime + ~melodyRestTime;
+                    // Add fermata release rest if applicable
+                    if(~modes.fermata) {
+                        totalWaitTime = totalWaitTime + ~fermataReleaseRest;
+                    };
+                } {
+                    ["No melody rest added (CC 45 is OFF)"].postln;
+                };
+
+                ["Iteration timing: noteRest:", currentNoteRest,
+                 "lastNoteDur:", if(~lastNoteDuration.notNil, {~lastNoteDuration}, {"unknown"}),
+                 "totalWaitTime:", totalWaitTime].postln;
+
+                // Create a new ProcMod instance for this iteration
+                proc = ~createMelodyProc.value(melodyKey);
+                ~melodyProcs[melodyKey] = proc;
+
+                // Start CC envelopes for this melody based on mode
+                if(~loopingCCEnvelopes) {
+                    ~startLoopingCCEnvelopes.value(melodyKey);
+                } {
+                    ~startCCEnvelopesOnChannel0.value(melodyKey);
+                };
+
+                // Play immediately without delay
+                ["Playing melody iteration:", melodyKey].postln;
+                proc.play;
+
+                // Wait for melody to complete before playing again
+                ["Waiting", totalWaitTime, "seconds before next iteration"].postln;
+                totalWaitTime.wait;
             };
-
-            // Play immediately without delay
-            ["Playing melody iteration:", melodyKey].postln;
-            proc.play;
-
-            // Wait for melody to complete before playing again
-            ["Waiting", totalWaitTime, "seconds before next iteration"].postln;
-            totalWaitTime.wait;
         };
     }).play;
 };
@@ -1218,6 +1531,180 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
         // ~stopAllMelodies.value;
     };
 };
+// =====================================================================
+// Continuous Loop Sequence
+// =====================================================================
+
+// Variables to track the continuous loop sequence
+// ~continuousLoopSequence = [\loop1, \loop2, \loop3, \loop4, \loop5, \loop6, \loop7, \loop8];
+~continuousLoopSequence = [\loop1, \loop1a];
+~currentLoopIndex = 0;
+~currentLoopIteration = 0;
+~continuousLoopTask = nil;
+~continuousLoopRunning = false;
+
+// Function to start playing all loops sequentially
+~startContinuousLoopSequence = {
+    var initialCycle = ~currentCycle; // Track initial cycle to detect change
+    // Stop any currently playing melody or loop
+    ~stopLoopingMelody.value;
+    ~stopAllMelodies.value;
+
+    if(~continuousLoopTask.notNil) {
+        ~continuousLoopTask.stop;
+    };
+
+    // Reset tracking variables
+    ~currentLoopIndex = 0;
+    ~currentLoopIteration = 0;
+    ~continuousLoopRunning = true;
+
+    ["Starting continuous loop sequence with", ~continuousLoopSequence.size, "loops"].postln;
+
+    // Create a task to manage the continuous loop sequence
+    ~continuousLoopTask = Task({
+        var currentLoopKey, loopCount, pattern, noteCount, currentNoteRest;
+        var melodyDuration, totalWaitTime, proc, isPaused = false, cycleChanged = false;
+
+        // Continue until manually stopped
+        while({ ~continuousLoopRunning }) {
+            // Check if the cycle has changed FIRST
+            if(initialCycle != ~currentCycle) {
+                ["Cycle changed from", initialCycle, "to", ~currentCycle,
+                 "- Updating to play from the new sequence"].postln;
+
+                // Update continuous sequence based on the new cycle
+                ~continuousLoopSequence = ~developmentCycles[~currentCycle].sequence;
+
+                // Reset sequence counters
+                ~currentLoopIndex = 0;
+                ~currentLoopIteration = 0;
+
+                // Update tracking variable
+                initialCycle = ~currentCycle;
+
+                ["DEBUG: Cycle Change Detected! Assigning new sequence:", ~developmentCycles[~currentCycle].sequence].postln;
+                ~continuousLoopSequence = ~developmentCycles[~currentCycle].sequence;
+
+                // Reset sequence counters
+                ~currentLoopIndex = 0;
+                ~currentLoopIteration = 0;
+
+                ["Now playing sequence from cycle:", ~currentCycle,
+                 "with", ~continuousLoopSequence.size, "melodies"].postln;
+            };
+
+            // Check if we need to pause
+            if(~modes.pauseNotesMode) {
+                // Only print the message once when entering pause mode
+                if(isPaused.not) {
+                    ["PAUSED: Waiting until pause mode is disabled (CC 41)"].postln;
+                    isPaused = true;
+                };
+
+                // Wait briefly then check again
+                0.1.wait;
+            } {
+                // If we're not paused, proceed with normal playback
+
+                // If we were paused and now we're not, print a message
+                if(isPaused) {
+                    ["RESUMING: Pause mode disabled, continuing playback"].postln;
+                    isPaused = false;
+                };
+
+                // --> ADDED DEBUG <--
+                ["DEBUG: Pre-Select State:",
+                 "currentCycle:", ~currentCycle,
+                 "initialCycle:", initialCycle,
+                 "contLoopSeq:", ~continuousLoopSequence,
+                 "contLoopIdx:", ~currentLoopIndex].postln;
+
+                // Get the current loop to play
+                currentLoopKey = ~continuousLoopSequence[~currentLoopIndex];
+                ["DEBUG: Selected Key:", currentLoopKey].postln;
+
+                loopCount = ~melodyDict[currentLoopKey].loopCount ? 1; // Default to 1 if not specified
+
+                ["Playing loop sequence:", currentLoopKey, "iteration", ~currentLoopIteration + 1, "of", loopCount].postln;
+
+                // Get pattern info
+                pattern = ~melodyDict[currentLoopKey].patterns[0];
+                noteCount = if(~modes.removeLast, {pattern.size - 1}, {pattern.size});
+
+                // Get current rest time
+                currentNoteRest = ~noteRest;
+                if(~midiController.notNil) {
+                    currentNoteRest = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
+                };
+
+                // Calculate wait time
+                if(~lastNoteDuration.notNil) {
+                    melodyDuration = (noteCount - 1) * currentNoteRest + ~lastNoteDuration;
+                } {
+                    melodyDuration = noteCount * currentNoteRest;
+                };
+
+                totalWaitTime = melodyDuration;
+
+                // Check real-time melody rest mode setting (affected by CC 45)
+                if(~modes.melodyRestMode) {
+                    ["Loop sequence: Adding melody rest of", ~melodyRestTime, "seconds (CC 45 is ON)"].postln;
+                    totalWaitTime = totalWaitTime + ~melodyRestTime;
+                } {
+                    ["Loop sequence: No melody rest (CC 45 is OFF)"].postln;
+                };
+
+                // Create and play a new ProcMod for this iteration
+                proc = ~createMelodyProc.value(currentLoopKey);
+                ~melodyProcs[currentLoopKey] = proc;
+
+                // Start CC envelopes
+                if(~loopingCCEnvelopes) {
+                    ~startLoopingCCEnvelopes.value(currentLoopKey);
+                } {
+                    ~startCCEnvelopesOnChannel0.value(currentLoopKey);
+                };
+
+                // Play immediately
+                proc.play;
+
+                // Wait for melody to complete
+                ["Waiting", totalWaitTime, "seconds before next iteration"].postln;
+                totalWaitTime.wait;
+
+                // Increment counters and check if we need to move to next loop
+                ~currentLoopIteration = ~currentLoopIteration + 1;
+
+                if(~currentLoopIteration >= loopCount) {
+                    // Move to next loop
+                    ~currentLoopIteration = 0;
+                    ~currentLoopIndex = (~currentLoopIndex + 1) % ~continuousLoopSequence.size;
+                    ["Moving to next loop:", ~continuousLoopSequence[~currentLoopIndex]].postln;
+                };
+            };
+        };
+    }).play;
+};
+
+// Function to stop the continuous loop sequence
+~stopContinuousLoopSequence = {
+    ["Stopping continuous loop sequence"].postln;
+    ~continuousLoopRunning = false;
+
+    if(~continuousLoopTask.notNil) {
+        ~continuousLoopTask.stop;
+        ~continuousLoopTask = nil;
+    };
+
+    // Optionally stop any currently playing melody
+    ~stopAllMelodies.value;
+};
+
+// Example usage:
+// ~startContinuousLoopSequence.value;  // Start playing through all loops
+// ~stopContinuousLoopSequence.value;   // Stop the sequence
+
 // ~startLoopingMelody.value(\loop1);
 // ~stopLoopingMelody.value;
 // Example usage:
@@ -1225,3 +1712,4 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 // ~stopLoopingMelody.value;          // Stop the loop
 // ~playAllMelodiesInSequence.value;
 // ~playMelody.value(\set1);
+
