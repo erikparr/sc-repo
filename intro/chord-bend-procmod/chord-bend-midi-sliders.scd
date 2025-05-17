@@ -11,6 +11,7 @@
 ~bendDurations = [10.0, 7.5, 6.0];
 ~exprLevels = [100, 110, 120];
 ~exprDurations = [1.0, 1.2, 1.4];
+~numInstruments = 3; // Global definition of number of instruments
 
 // Chord notes (can be modified by MIDI)
 ~startChord = [92, 92, 92]; // Default chord
@@ -44,11 +45,12 @@
 
 // Function to update parameters from MIDI sliders
 ~updateParamsFromMIDI = {
+    ~numInstruments = ~vstList.size; // Update based on actual VST list size
     // Debug: Print slider values occasionally
     if(~updateCounter.isNil) { ~updateCounter = 0 };
     ~updateCounter = ~updateCounter + 1;
     if(~updateCounter % 100 == 0) { ~printSliderValues.value };
-    
+
     // Map sliders 1-3 to bend percentages (0-100%)
     ~bendPercents[0] = ~midiController.getSliderValue(0).linlin(0, 127, 0, 100);
     ~bendPercents[1] = ~midiController.getSliderValue(1).linlin(0, 127, 0, 100);
@@ -68,9 +70,9 @@
     ~exprDurations[0] = ~midiController.getSliderValue(7).linlin(0, 127, 0.1, 5.0);
     ~exprDurations[1] = ~midiController.getSliderValue(7).linlin(0, 127, 0.1, 5.0);
     ~exprDurations[2] = ~midiController.getSliderValue(7).linlin(0, 127, 0.1, 5.0);
-    
+
     // Update the bend values in real-time for all active synths
-    3.do { |i|
+    ~numInstruments.do { |i|
         if(~bendSynths[i].notNil) {
             var bendValue = ~calcBendPercent.value(~bendPercents[i]);
             ~bendSynths[i].set(\peak, bendValue);
@@ -78,7 +80,7 @@
             ~bendSynths[i].set(\returnTime, ~bendDurations[i] * 0.5);
             ~bendSynths[i].set(\loopDuration, ~bendDurations[i] * 2);
         };
-        
+
         if(~exprSynths[i].notNil) {
             ~exprSynths[i].set(\peak, ~exprLevels[i]);
             ~exprSynths[i].set(\attackTime, ~exprDurations[i]);
@@ -100,9 +102,8 @@
 ~chordBendCTK.function_({ |event, group, envbus, inc, server|
     // Update parameters from MIDI before starting
     ~updateParamsFromMIDI.value;
-
     // Create synths for each tuba
-    3.do { |i|
+    ~numInstruments.do { |i|
         var vstKey = ("vsti" ++ i).asSymbol;
         var vst = ~vstList[vstKey];
         var bendValue = ~calcBendPercent.value(~bendPercents[i]);
@@ -167,7 +168,7 @@
 
     // Print initial slider values
     ~printSliderValues.value;
-    
+
     // Register direct MIDI slider handlers to ensure we get values
     ~sliderHandlers = 8.do { |i|
         MIDIFunc.cc({ |val, ccNum, chan, src|
@@ -197,7 +198,7 @@
 
     // Stop the CTK event
     ~chordBendCTK.stop;
-    
+
     // Free MIDI handlers
     if(~sliderHandlers.notNil) {
         ~sliderHandlers.do { |handler| handler.free };
@@ -228,7 +229,7 @@
     // Stop all routines
     ~midiUpdateRoutine.stop;
     ~chordBendCTK.stop;
-    
+
     // Free MIDI handlers
     if(~sliderHandlers.notNil) {
         ~sliderHandlers.do { |handler| handler.free };

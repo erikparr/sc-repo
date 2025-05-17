@@ -143,8 +143,8 @@
 
 // Flags for different behavior modes
 ~modes = (
-    melodyRestMode: true,        // Enable longer rests between melodies (renamed from melodyRest)
-    fermata: true,          // Hold the last note of each melody
+    melodyRestMode: false,        // Enable longer rests between melodies (renamed from melodyRest)
+    fermata: false,          // Hold the last note of each melody
     rampTempo: false,        // Progressively change note rest times
     velocityMultiply: false, // Apply velocity multipliers to first/last notes
     noteOffset: true,        // Apply note offset to all notes
@@ -157,6 +157,7 @@
 ~repetitions = 1;            // Number of times to repeat each melody
 ~currentMelodySetIndex = 0;  // Current melody index
 ~currentCycle = 1;           // Current development cycle
+~firstNoteRestMult = 1.0;        // Multiplier for the rest after the first note (1.0 - 2.0), controlled by knob index 6
 
 // =====================================================================
 // CC Control Envelope System
@@ -166,32 +167,24 @@
 ~ccControl = (
     enabled: true,                // Enable/disable the CC control
     expressionCC: 17,             // CC number for expression
-    expressionMin: 40,            // Minimum expression value
-    expressionMax: 110,           // Maximum expression value (slightly reduced to avoid overblowing)
+    expressionMin: 10,            // Minimum expression value
+    expressionMax: 120,           // Maximum expression value (slightly reduced to avoid overblowing)
     expressionShape: \sin,        // Envelope shape: \sin, \lin, \exp, etc.
-    expressionPeakPos: 0.6,       // Position of peak in the envelope (0.0-1.0)
-
-    // Time factors relative to melody duration
-    attackFactor: 0.9,            // Portion of melody duration for attack
-    decayFactor: 0.1,             // Portion of melody duration for decay
+    expressionPeakPos: 0.5,       // Position of peak in the envelope (0.0-1.0)
+    expressionDurationScalar: 1.0, // Scalar for expression envelope duration (0.1 to 1.0)
 
     // Controls for future additions
     bowPressureCC: 23,            // CC for bow pressure (for future use)
-    harmAGainCC: 25,              // CC for harmonic A gain (for future use)
-    harmBGainCC: 26,              // CC for harmonic B gain (for future use)
-    bowPressureAccentCC: 27,      // CC for bow pressure accent (for future use)
-    bowPositionCC: 28             // CC for bow position (for future use)
 );
 
 // Function to calculate envelope duration based on current melody
-~calcEnvelopeDuration = {
+~calcEnvelopeDuration = { |activeNoteRest|
     var melodyKey = ~currentSequence[~currentMelodySetIndex];
     var pattern = ~melodyDict[melodyKey].patterns[0];
     var noteCount = if(~modes.removeLast, {pattern.size - 1}, {pattern.size});
-    var totalNoteDuration = noteCount * ~noteRest * ~repetitions;
+    var totalNoteDuration = noteCount * activeNoteRest * ~repetitions;
 
-    // If we have melody rests, include those in the envelope duration
-    totalNoteDuration + (if(~modes.melodyRestMode, {~melodyRestTime}, {0}));
+    totalNoteDuration;
 };
 
 // Function to create Env for a CC over time
@@ -220,14 +213,26 @@
 
 // Function to start a CC envelope for the current melody
 ~startCCEnvelopes = { |melodyKey|
-    var duration = ~calcEnvelopeDuration.value;
-    var attackTime, sustainTime, releaseTime;
+    var currentActualNoteRest, duration;
+    var attackTime, releaseTime;
+    var scaledExpressionDuration;
 
-    // Update expression range from knobs before creating envelopes
+    // Update expression range from knobs AND duration scalar before creating envelopes
     ~updateExpressionRangeFromKnobs.value;
+    ~updateExpressionDurationScalarFromKnob.value;
+
+    // Determine the actual noteRestTime to be used
+    if(~midiController.notNil) {
+        currentActualNoteRest = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 1.0);
+    } { // No MIDI controller, use global default
+        currentActualNoteRest = ~noteRest;
+    };
+
+    duration = ~calcEnvelopeDuration.value(currentActualNoteRest); // This is the trueMelodyDuration
+    scaledExpressionDuration = duration * ~ccControl.expressionDurationScalar;
 
     // Concise logging
-    "Starting CC envelopes for duration: %".format(duration).postln;
+    "Starting CC envelopes for true melody duration: %, scaled expr duration: %".format(duration, scaledExpressionDuration).postln;
 
     // Free any existing synths
     ~activeCCSynths.do { |synth|
@@ -236,14 +241,14 @@
     ~activeCCSynths = Dictionary.new;
 
     if(~ccControl.enabled) {
-        // Calculate timing parameters based on envelope duration
-        attackTime = duration * ~ccControl.attackFactor * ~ccControl.expressionPeakPos;
-        sustainTime = duration * 0.1; // Short sustain at peak
-        releaseTime = duration * ~ccControl.decayFactor * (1 - ~ccControl.expressionPeakPos);
+        // Calculate timing parameters based on SCALED expression envelope duration
+        attackTime = scaledExpressionDuration * ~ccControl.expressionPeakPos;
+        releaseTime = scaledExpressionDuration * (1.0 - ~ccControl.expressionPeakPos);
 
         // Create expression control synths for each VST
         ~vstList.keysValuesDo { |vstKey, vst, i|
             var ccSynth;
+            "expression Max: %".format(~ccControl.expressionMax).postln;
 
             // Create a single control synth for each VST
             ccSynth = Synth(\ccEnvelope, [
@@ -281,80 +286,78 @@
 
 // Function to start looping CC envelopes
 ~startLoopingCCEnvelopes = { |melodyKey|
-    var duration = ~calcEnvelopeDuration.value;
+    var currentActualNoteRest, duration;
     var attackTime, releaseTime, loopDuration;
+    var scaledExpressionDuration;
 
-    // Update expression range from knobs before creating envelopes
     ~updateExpressionRangeFromKnobs.value;
-
-    "Starting looping CC envelopes for duration: %".format(duration).postln;
-
-    // Free any existing synths
+    ~updateExpressionDurationScalarFromKnob.value;
     ~stopCCEnvelopes.value;
 
-    if(~ccControl.enabled) {
-        // Calculate timing parameters based on envelope duration
-        attackTime = duration * ~ccControl.attackFactor * ~ccControl.expressionPeakPos;
-        releaseTime = duration * ~ccControl.decayFactor * (1 - ~ccControl.expressionPeakPos);
-        loopDuration = attackTime + releaseTime + 0.1; // Add a small padding
+    if(~midiController.notNil) {
+        currentActualNoteRest = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 1.0);
+    } { currentActualNoteRest = ~noteRest; };
 
-        // Create looping expression control synths for each VST
+    duration = ~calcEnvelopeDuration.value(currentActualNoteRest); // This is trueDuration
+    scaledExpressionDuration = duration * ~ccControl.expressionDurationScalar;
+    "Starting looping CC envelopes for true duration: %, scaled expr duration: %".format(duration, scaledExpressionDuration).postln;
+
+    if(~ccControl.enabled) {
+        var exprAttackTime, exprReleaseTime, exprLoopDuration;
+
+        // Timings for the SCALED Expression Envelope (CC17)
+        exprAttackTime = scaledExpressionDuration * ~ccControl.expressionPeakPos;
+        exprReleaseTime = scaledExpressionDuration * (1.0 - ~ccControl.expressionPeakPos);
+        exprLoopDuration = scaledExpressionDuration;
+
+        // Base timings for any OTHER CC envelopes, derived from TRUE melody duration
+        attackTime = duration * ~ccControl.expressionPeakPos; // Unscaled attack
+        releaseTime = duration * (1.0 - ~ccControl.expressionPeakPos); // Unscaled release
+        loopDuration = duration; // Unscaled loop
+
+        // Create looping expression control synths for each VST (this is for CC17)
         ~vstList.keysValuesDo { |vstKey, vst, i|
             var ccSynth;
-
-            // Create a looping CC envelope synth for each VST
             ccSynth = Synth(\ccEnvelopeLoop, [
                 \start, ~ccControl.expressionMin,
                 \peak, ~ccControl.expressionMax,
                 \end, ~ccControl.expressionMin,
                 \delayTime, 0,
-                \attackTime, attackTime,
-                \releaseTime, releaseTime,
-                \loopDuration, loopDuration,
-                \chanIndex, i, // Always use channel 0
+                \attackTime, exprAttackTime,       // Use scaled time for expression
+                \releaseTime, exprReleaseTime,     // Use scaled time for expression
+                \loopDuration, exprLoopDuration,   // Use scaled loop duration for expression
+                \chanIndex, i,
                 \ccNum, ~ccControl.expressionCC,
-                \timeOffset, i * 0.25, // Stagger slightly between VSTs
+                \timeOffset, i * 0.25,
                 \attackCurve, ~ccControl.expressionShape,
                 \releaseCurve, ~ccControl.expressionShape,
                 \delayCurve, \lin
             ]);
-
-            // Store the synth in the dictionary
             ~activeCCSynths[vstKey] = ccSynth;
-
-            "Created looping CC envelope synth for %".format(vstKey).postln;
+            "Created SCALED looping CC envelope synth for %".format(vstKey).postln;
         };
 
-        // If needed, add additional CC controllers for bow parameters, etc.
         if(~advancedCCsEnabled == true) {
             ~vstList.keysValuesDo { |vstKey, vst, i|
-                var bowPressureSynth, harmASynth, harmBSynth, accentSynth, bowPositionSynth;
-
-                // Example: Create bow pressure CC synth with different parameters
+                var bowPressureSynth;
                 bowPressureSynth = Synth(\ccEnvelopeLoop, [
-                    \start, 20,             // Different start value
-                    \peak, 100,             // Different peak value
+                    \start, 20,
+                    \peak, 100,
                     \end, 20,
-                    \delayTime, i * 0.1,    // Staggered delay
-                    \attackTime, attackTime * 0.8,  // Shorter attack
-                    \releaseTime, releaseTime * 1.2, // Longer release
-                    \loopDuration, loopDuration * 1.1, // Slightly different loop timing
+                    \delayTime, i * 0.1,
+                    \attackTime, attackTime * 0.8,  // Uses unscaled base attackTime
+                    \releaseTime, releaseTime * 1.2, // Uses unscaled base releaseTime
+                    \loopDuration, loopDuration * 1.1, // Uses unscaled base loopDuration
                     \chanIndex, i,
                     \ccNum, ~ccControl.bowPressureCC,
-                    \timeOffset, i * 0.15,  // Different stagger timing
+                    \timeOffset, i * 0.15,
                     \attackCurve, ~ccControl.expressionShape,
                     \releaseCurve, ~ccControl.expressionShape,
                     \delayCurve, \lin
                 ]);
-
-                // Store in the dictionary with a compound key
                 ~activeCCSynths[vstKey ++ "_bowPressure"] = bowPressureSynth;
-
-                // Additional CC controllers could be added in a similar way
-                // for harmonic gain, bow position, etc.
             };
         };
-
         "Looping CC control synths started".postln;
     }  {
         "CC Control disabled".postln;
@@ -510,6 +513,215 @@
         last: 1.0
     )
 ));
+
+~melodyDict.put(\set2a, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [94, 87, 82, 75, 94],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    )
+));
+
+~melodyDict.put(\set2b, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [93, 87, 82, 78, 93],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    )
+));
+
+~melodyDict.put(\set2c, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [91, 87, 82, 75, 91],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    )
+));
+
+~melodyDict.put(\set2d, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [94, 90, 82, 78, 94],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    )
+));
+
+~melodyDict.put(\set3a, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [82, 77, 78, 73, 82],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    )
+));
+
+~melodyDict.put(\set4a, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [81, 77, 72, 65, 81],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount: 15
+));
+
+~melodyDict.put(\set4b, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [82, 77, 72, 65, 82],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount: 9
+));
+
+~melodyDict.put(\set4c, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [78, 75, 72, 65, 78],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount: 3
+));
+
+~melodyDict.put(\set4d, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [85, 82, 73, 66, 85],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount:9
+));
+
+~melodyDict.put(\set4e, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [78, 77, 70, 66, 78],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount:9
+));
+
+~melodyDict.put(\set4f, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [78, 77, 85, 82, 78],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount:15
+));
+
+~melodyDict.put(\bridge1a, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [82, 77, 70, 82],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount:15
+));
+
+~melodyDict.put(\bridge1b, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [ 84, 81, 72, 84],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 0.5
+    ),
+    loopCount:15
+));
+~melodyDict.put(\bridge1bA, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [ 81, 77, 72, 84],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount:15
+));
+~melodyDict.put(\bridge1bB, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [ 81, 77, 65, 81],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount:15
+));
+
+~melodyDict.put(\bridge1c, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [85, 82, 66, 85],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount:15
+));
+~melodyDict.put(\bridge2a, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [ 78, 73, 70, 63, 78],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 0.5
+    ),
+    loopCount:15
+));
+
+~melodyDict.put(\bridge2b, (
+    name: "Tuba Melody IX",
+    patterns: [
+        [ 66, 61,0,0, 66],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 0.5
+    ),
+    loopCount:15
+));
+
 ~melodyDict.put(\part2a, (
     name: "Tuba Melody X",
     patterns: [
@@ -530,6 +742,98 @@
         last: 2.0
     )
 ));
+~melodyDict.put(\part3x, (
+    name: "Tuba Melody X",
+    patterns: [
+        [70, 85, 72, 87, 73, 89, 75, 87, 75, 85, 70, 84, 72, 82, 70, 85],
+    ],
+    velocityMultipliers: (
+        first: 1.0,
+        last: 1.0
+    )
+));
+~melodyDict.put(\part3a, (
+    name: "Tuba Melody X",
+    patterns: [
+        [70, 85, 84, 70],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    )
+    loopCount: 5
+));
+~melodyDict.put(\part3b, (
+    name: "Tuba Melody X",
+    patterns: [
+        [72, 87, 85, 77],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount: 5
+));
+
+~melodyDict.put(\part3c, (
+    name: "Tuba Melody X",
+    patterns: [
+        [73, 89, 87, 73],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount: 5
+));
+
+~melodyDict.put(\part3d, (
+    name: "Tuba Melody X",
+    patterns: [
+[72, 87, 85, 72],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount: 5
+));
+
+~melodyDict.put(\part3e, (
+    name: "Tuba Melody X",
+    patterns: [
+        [70, 85, 84, 70],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount: 5
+));
+
+~melodyDict.put(\part3f, (
+    name: "Tuba Melody X",
+    patterns: [
+        [72, 87, 82, 72],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    )
+    loopCount: 5
+));
+~melodyDict.put(\part3g, (
+    name: "Tuba Melody X",
+    patterns: [
+        [70, 82, 85, 70],
+    ],
+    velocityMultipliers: (
+        first: 1.5,
+        last: 1.0
+    ),
+    loopCount: 5
+));
+
 
 ~melodyDict.put(\loop1, (
     name: "Tuba Melody XI",
@@ -753,30 +1057,113 @@
 // 	sequence: [\loop12, \loop12a]
 // ));
 
+// ~developmentCycles.put(1, (
+// 	name: "Second Cycle",
+// 	sequence: [\set2a, \set2a]
+// ));
+// ~developmentCycles.put(2, (
+// 	name: "Second Cycle",
+// 	sequence: [\set2b, \set2b]
+// ));
+// ~developmentCycles.put(3, (
+// 	name: "Second Cycle",
+// 	sequence: [\set2c, \set2c]
+// ));
+// ~developmentCycles.put(4, (
+// 	name: "Second Cycle",
+// 	sequence: [\set2d, \set2d]
+// ));
+// ~developmentCycles.put(1, (
+// name: "Second Cycle",
+// sequence: [\part2a, \part2a]
+// ));
+// ~developmentCycles.put(2, (
+// name: "Second Cycle",
+// sequence: [\part2b, \part2b]
+// ));
+
+
+// ~developmentCycles.put(1, (
+// name: "Second Cycle",
+// sequence: [\part3a, \part3a]
+// ));
+// ~developmentCycles.put(2, (
+// name: "Second Cycle",
+// sequence: [\part3b, \part3b]
+// ));
+// ~developmentCycles.put(3, (
+// name: "Second Cycle",
+// sequence: [\part3c, \part3c]
+// ));
+// ~developmentCycles.put(4, (
+// name: "Second Cycle",
+// sequence: [\part3d, \part3d]
+// ));
+// ~developmentCycles.put(5, (
+// name: "Second Cycle",
+// sequence: [\part3e, \part3e]
+// ));
+// ~developmentCycles.put(6, (
+// name: "Second Cycle",
+// sequence: [\part3f, \part3f]
+// ));
+
+// ~developmentCycles.put(1, (
+// 	name: "Second Cycle",
+// 	sequence: [\part3a, \part3b, \part3c, \part3d, \part3e, \part3g]
+// ));
+//
+
 ~developmentCycles.put(1, (
-name: "Second Cycle",
-sequence: [\set1, \set1]
-));
-~developmentCycles.put(2, (
 name: "Second Cycle",
 sequence: [\set3, \set3]
 ));
-~developmentCycles.put(3, (
+~developmentCycles.put(2, (
 name: "Second Cycle",
 sequence: [\set5, \set5]
 ));
-~developmentCycles.put(4, (
+~developmentCycles.put(3, (
 name: "Second Cycle",
 sequence: [\set6, \set6]
 ));
-~developmentCycles.put(5, (
+~developmentCycles.put(4, (
 name: "Second Cycle",
 sequence: [\set7, \set7]
 ));
-~developmentCycles.put(6, (
+~developmentCycles.put(5, (
 name: "Second Cycle",
-sequence: [\set8, \set8]
+sequence: [\bridge2b]
 ));
+
+
+// ~developmentCycles.put(1, (
+//     name: "Second Cycle",
+//     sequence: [\bridge1a]
+// ));
+// ~developmentCycles.put(2, (
+//     name: "Second Cycle",
+//     sequence: [\bridge1b]
+// ));
+// ~developmentCycles.put(3, (
+//     name: "Second Cycle",
+//     sequence: [\bridge1bA]
+// ));
+// ~developmentCycles.put(4, (
+//     name: "Second Cycle",
+//     sequence: [\bridge1bB]
+// ));
+// ~developmentCycles.put(5, (
+//     name: "Second Cycle",
+//     sequence: [\bridge1c]
+// ));
+// ~developmentCycles.put(6, (
+//     name: "Second Cycle",
+//     sequence: [\bridge2a]
+// ));
+// ~developmentCycles.put(7, (
+//     name: "Second Cycle",
+//     sequence: [\bridge2b]
+// ));
 // Initialize the current sequence
 ~currentSequence = ~developmentCycles[~currentCycle].sequence;
 
@@ -787,7 +1174,7 @@ sequence: [\set8, \set8]
 // Function to modify a note based on current settings
 ~processNote = { |note, isFirstNote=false, isLastNote=false, melodyKey|
     var processedNote = note;
-    var velocity = 80; // Default velocity
+    var velocity = 0; // Default velocity
     var velocityMultiplier = 1.0;
 
     // Use MIDI controller if available
@@ -810,6 +1197,8 @@ sequence: [\set8, \set8]
         };
         velocity = (velocity * velocityMultiplier).asInteger.clip(1, 127);
     };
+
+
 
     [processedNote, velocity];
 };
@@ -911,7 +1300,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 
     // Create an ASR envelope: quick attack, sustain at 1, quick release.
     // This sustains until ProcMod.release is called.
-    var env = Env.asr(attackTime: 0.01, sustainLevel: 1.0, releaseTime: 0.1, curve: \sin);
+    var env = Env.asr(attackTime: 0.01, sustainLevel: 1.0, releaseTime: 0.1, curve: \lin);
 
     // Create the ProcMod for this melody
     ProcMod.new(
@@ -930,19 +1319,24 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
             var effectiveLength = if(~modes.removeLast, {pattern.size - 1}, {pattern.size});
             var notePlaying = false;
             var task;
-
-            // Get duration parameters (use defaults if no controller)
             var noteDuration = ~noteDuration;
             var noteRestTime = ~noteRest;
             var temporalAccent = 1;
+            var knobRawValue; // Declare knobRawValue here
 
             // Use MIDI controller values if available
             if(~midiController.notNil) {
                 noteDuration = ~midiController.getSliderValue(1).linlin(0, 127, 0.005, 0.5);
                 noteRestTime = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
-                temporalAccent = ~midiController.getSliderValue(5).linlin(0, 127, 1, 8);
+                temporalAccent = ~midiController.getSliderValue(5).linlin(0, 127, 0, 8);
                 // Get melody rest time from slider 4
                 ~melodyRestTime = ~midiController.getSliderValue(4).linlin(0, 127, 0.0, 1.0);
+
+                // Read knob for firstNoteRestMult (using Knob Index 6 - the 7th knob)
+                knobRawValue = ~midiController.getKnobValue(6);
+                ~firstNoteRestMult = knobRawValue.linlin(0, 127, 1.0, 2.0);
+                ["ProcMod Start: First Note Rest Mult (from Knob 7/Index 6) set to:",
+                 ~firstNoteRestMult.round(0.01), "(raw:", knobRawValue, ")"].postln;
             };
 
             // Store the ID of the active melody
@@ -965,7 +1359,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                         var isLastNote = (noteIndex == (effectiveLength - 1));
                         var isFermata = isLastNote && ~modes.fermata && ~modes.melodyRestMode;
                         var actualDuration, processedNote;
-
+                        var actualWaitTime;
                         // Process the note (apply offset, etc.)
                         processedNote = ~processNote.value(note, isFirstNote, isLastNote, melodyKey);
 
@@ -1000,18 +1394,18 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                         };
 
                         // Make sure duration doesn't exceed rest time
-                        if(isFermata.not) {
-                            if(isLastNote) {
-                                // For last note, allow any duration - no cap
-                                // The loop will adjust timing to accommodate it
-                            }  {
-                                // For other notes, keep the normal cap
-                                var maxDuration = noteRestTime * 0.9;
-                                if(actualDuration > maxDuration) {
-                                    actualDuration = maxDuration;
-                                };
-                            };
-                        };
+						// if(isFermata.not) {
+						// 	if(isLastNote) {
+						// 		// For last note, allow any duration - no cap
+						// 		// The loop will adjust timing to accommodate it
+						// 	}  {
+						// 		// For other notes, keep the normal cap
+						// 		var maxDuration = noteRestTime * 0.9;
+						// 		if(actualDuration > maxDuration) {
+						// 			actualDuration = maxDuration;
+						// 		};
+						// 	};
+						// };
 
                         // Release any previous fermata note
                         if(~lastFermataNote.notNil) {
@@ -1035,8 +1429,20 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                             ~lastFermataNote = processedNote[0];
                         };
 
-                        // Wait before playing the next note
-                        noteRestTime.wait;
+                        // MODIFIED: Wait logic for first note rest multiplier
+                         actualWaitTime; // Declare actualWaitTime here
+                        actualWaitTime = noteRestTime; // Default wait time
+                        if (isFirstNote) {
+                            actualWaitTime = noteRestTime * ~firstNoteRestMult;
+                            ["First note's rest: applying ~firstNoteRestMult:", ~firstNoteRestMult.round(0.01),
+                             "to base noteRestTime:", noteRestTime.round(0.01),
+                             "-> Actual wait:", actualWaitTime.round(0.01)
+                            ].postln;
+                        } {
+                            ["Subsequent note's rest: using base noteRestTime:", noteRestTime.round(0.01)].postln;
+                        };
+                        actualWaitTime.wait;
+                        // END MODIFIED Wait logic
 
                         // Advance to next note
                         noteIndex = noteIndex + 1;
@@ -1320,9 +1726,9 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
     ["Switched to cycle", cycleNum].postln;
 };
 ~setMode.value(\fermata, true);
-~setMode.value(\noteOffset, false);
+~setMode.value(\noteOffset, true);
 ~setRepetitions.value(1);
-~setNoteOffset.value(0);
+~setNoteOffset.value(-12);
 
 // =====================================================================
 // CC Control Functions
@@ -1490,13 +1896,13 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                 };
 
                 // Read the current MIDI controller values on each iteration
-				// currentNoteRest = ~noteRest; // Default value
-				// if(~midiController.notNil) {
-				// 	currentNoteRest = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
-				// 	// Get melody rest time from slider 4
-				// 	~melodyRestTime = ~midiController.getSliderValue(4).linlin(0, 127, 0.0, 1.0);
-				// 	["DEBUG: Using MIDI-controlled noteRest:", currentNoteRest, "melodyRestTime:", ~melodyRestTime].postln;
-				// };
+                currentNoteRest = ~noteRest; // Default value
+                if(~midiController.notNil) {
+                    currentNoteRest = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
+                    // Get melody rest time from slider 4
+                    ~melodyRestTime = ~midiController.getSliderValue(4).linlin(0, 127, 0.0, 1.0);
+                    ["DEBUG: Using MIDI-controlled noteRest:", currentNoteRest, "melodyRestTime:", ~melodyRestTime].postln;
+                };
 
                 // Calculate duration based on current settings
                 if(~lastNoteDuration.notNil) {
@@ -1576,7 +1982,8 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 
 // Variables to track the continuous loop sequence
 // ~continuousLoopSequence = [\loop1, \loop2, \loop3, \loop4, \loop5, \loop6, \loop7, \loop8];
-~continuousLoopSequence = [\set1, \set1];
+// ~continuousLoopSequence = [\part3a, \part3b, \part3c, \part3d, \part3e,  \part3g];
+~continuousLoopSequence = [\set4a, \set4b,  \set4d, \set4a, \set4b,  \set4e, \set4d, \set4f];
 ~currentLoopIndex = 0;
 ~currentLoopIteration = 0;
 ~continuousLoopTask = nil;
@@ -1743,9 +2150,8 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 // Example usage:
 // ~startContinuousLoopSequence.value;  // Start playing through all loops
 // ~stopContinuousLoopSequence.value;   // Stop the sequence
+~setMode.value(\noteOffset, false);
 
-// ~startLoopingMelody.value(\loop1);
-// ~stopLoopingMelody.value;
 // Example usage:
 // ~startLoopingMelody.value(\set1);  // Start looping melody set1
 // ~stopLoopingMelody.value;          // Stop the loop
@@ -1756,10 +2162,10 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 ~updateExpressionRangeFromKnobs = {
     if(~midiController.notNil) {
         // Use knob 1 (index 0) for minimum (0-63 range)
-        ~ccControl.expressionMin = ~midiController.getKnobValue(0).linlin(0, 127, 0, 63).asInteger;
+        ~ccControl.expressionMin = ~midiController.getKnobValue(0).linlin(0, 127, 0, 0).asInteger;
 
         // Use knob 2 (index 1) for maximu-m (64-127 range)
-        ~ccControl.expressionMax = ~midiController.getKnobValue(1).linlin(0, 127, 64, 127).asInteger;
+        ~ccControl.expressionMax = ~midiController.getKnobValue(1).linlin(0, 127, 0, 127).asInteger;
 
         // Make sure max is always greater than min
         if(~ccControl.expressionMax <= ~ccControl.expressionMin) {
@@ -1768,6 +2174,19 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 
         ["Expression range updated from knobs: min:", ~ccControl.expressionMin,
          "max:", ~ccControl.expressionMax].postln;
+    };
+};
+
+// Function to update CC control expression duration scalar from MIDI knob
+~updateExpressionDurationScalarFromKnob = {
+    if(~midiController.notNil) {
+        // Use knob 4 (index 3) for expression duration scalar (10% to 100%)
+        var scalar = ~midiController.getKnobValue(3).linlin(0, 127, 0.1, 1.0);
+        if(~ccControl.expressionDurationScalar != scalar) { // Only update if value changed
+            ~ccControl.expressionDurationScalar = scalar;
+            ["Expression Duration Scalar (Knob 4) updated to:", scalar.round(0.01)].postln;
+            // No automatic restart from here; other functions will handle that if needed when they are called.
+        };
     };
 };
 

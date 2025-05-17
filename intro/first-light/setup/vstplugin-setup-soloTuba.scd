@@ -31,7 +31,7 @@ VSTPlugin.search(options: ( exclude: [ "/Library/Audio/Plug-Ins/VST3/Komplete Ko
 // four instruments / 2 channels
 ~synth = Synth(\insert3, [\bus, 2]); // set to 2 and 3 for routing to reaper (set up routing in totalmix)
 //strings
-// ~dCello1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
+// ~dCello1 = VSTPluginController(~synth, \vs ti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
 // ~dCello2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
 // ~dCello3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
 // ~dCello4 = VSTPluginController(~synth, \vsti3).open("/Library/Audio/Plug-Ins/VST3/SWAM Cello 3.vst3", editor: true);
@@ -44,6 +44,21 @@ VSTPlugin.search(options: ( exclude: [ "/Library/Audio/Plug-Ins/VST3/Komplete Ko
 ~vstList.add(\vsti0 -> ~tuba1);
 ~vstList.add(\vsti1 -> ~tuba2);
 ~vstList.add(\vsti2 -> ~tuba3);
+
+// ~tuba1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Baritone Sax 3.vst3", editor: true);
+// ~tuba2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Baritone Sax 3.vst3", editor: true);
+// ~tuba3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Baritone Sax 3.vst3", editor: true);
+// ~vstList.add(\vsti0 -> ~tuba1);
+// ~vstList.add(\vsti1 -> ~tuba2);
+// ~vstList.add(\vsti2 -> ~tuba3);
+
+// ~flute1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Flute 3.vst3", editor: true);
+// ~flute2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Flute 3.vst3", editor: true);
+// ~flute3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Bass Flute 3.vst3", editor: true);
+// ~vstList.add(\vsti0 -> ~flute1);
+// ~vstList.add(\vsti1 -> ~flute2);
+// ~vstList.add(\vsti2 -> ~flute3);
+
 // ~dCello1 = VSTPluginController(~synth, \vsti0).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
 // ~dCello2 = VSTPluginController(~synth, \vsti1).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);
 // ~dCello3 = VSTPluginController(~synth, \vsti2).open("/Library/Audio/Plug-Ins/VST3/SWAM Viola 3.vst3", editor: true);

@@ -130,6 +130,28 @@
 
 }, 58);  // CC 58 for previous cycle
 
+// Add bend mode toggle control
+~toggleBendMode.free;
+~toggleBendMode = MIDIdef.cc(\toggleBendMode, { |val, ccNum, chan, src|
+    var buttonPressed = val > 0;
+    var lastState = ~lastButtonState[ccNum] ? false;
+
+    // Only toggle on rising edge (0->127, button press)
+    if(buttonPressed && (lastState == false)) {
+        // Toggle the bend mode
+        ~modes.bendMode = ~modes.bendMode.not;
+
+        // Provide immediate feedback
+        ["MIDI Button CC 46: Bend Mode toggled to",
+            if(~modes.bendMode, "ON", "OFF"),
+            "- Will affect fermata notes when fermata mode is ON"].postln;
+    };
+
+    // Remember current state
+    ~lastButtonState[ccNum] = buttonPressed;
+
+}, 46);  // CC 46 for the bend mode button
+
 // =====================================================================
 // Global variables and settings
 // =====================================================================
@@ -141,6 +163,14 @@
 ~melodyRestTime = 0.025;  // Renamed from ~melodyRest for clarity
 ~fermataReleaseRest = 0.25;
 
+// Bend control parameters
+~bendControl = (
+	bendPercent: -10,       // Bend amount in percentage (-100 to 100)
+	bendPeakTimeFactor: 0.7, // Portion of hold duration to reach peak bend
+	bendReturnTimeFactor: 0.3,// Portion of hold duration to return from bend
+	curveShape: \sin        // Envelope shape for bend
+);
+
 // Flags for different behavior modes
 ~modes = (
     melodyRestMode: true,        // Enable longer rests between melodies (renamed from melodyRest)
@@ -149,7 +179,8 @@
     velocityMultiply: false, // Apply velocity multipliers to first/last notes
     noteOffset: true,        // Apply note offset to all notes
     removeLast: false,       // Skip the last note in each melody
-    pauseNotesMode: false    // When true, stop triggering new notes (toggled by CC 41)
+    pauseNotesMode: false,   // When true, stop triggering new notes (toggled by CC 41)
+    bendMode: false          // When true, apply pitch bend to fermata notes (toggled by CC 46)
 );
 
 // Control parameters
@@ -407,6 +438,7 @@
 // =====================================================================
 // Melody Dictionary
 // =====================================================================
+
 
 // Tuba Melody Dictionary
 ~melodyDict = Dictionary.new;
@@ -903,19 +935,49 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 ~activeNotes = Dictionary.new;
 ~lastFermataNote = nil;
 ~sequenceTask = nil;
+~activeBendSynths = Dictionary.new; // Added for bend mode
 
 // Create a ProcMod for a melody
 ~createMelodyProc = { |melodyKey, patternIndex=0|
     var pattern = ~melodyDict[melodyKey].patterns[patternIndex];
     var id = (melodyKey ++ "_" ++ patternIndex).asSymbol;
+    var estimatedMaxTaskDuration, baseRest, maxNoteDur, maxAccent, maxMelRest, maxFermRest;
+    var effectiveLength = if(~modes.removeLast, {pattern.size - 1}, {pattern.size});
+var env;
+    // --- Calculate a safe maximum duration for the ProcMod envelope ---
+    // Use max possible values for dynamic controls
+    baseRest = 0.4; // Max from slider 2 range
+    maxNoteDur = 1.0; // Max from slider 1 range
+    maxAccent = 8.0; // Max from slider 5 range
+    maxMelRest = 1.0; // Max from slider 4 range
+    maxFermRest = ~fermataReleaseRest; // Fixed value
 
-    // Create an ASR envelope: quick attack, sustain at 1, quick release.
-    // This sustains until ProcMod.release is called.
-    var env = Env.asr(attackTime: 0.01, sustainLevel: 1.0, releaseTime: 0.1, curve: \sin);
+    // Duration of notes + rests within repetitions
+    estimatedMaxTaskDuration = ~repetitions * (
+        (effectiveLength - 1) * baseRest + // Time for n-1 notes
+        (maxNoteDur * maxAccent) // Max time for the last note
+    );
+
+    // Add potential time between repetitions
+    if(~repetitions > 1) {
+        estimatedMaxTaskDuration = estimatedMaxTaskDuration + ((~repetitions - 1) * (baseRest * 2));
+    };
+
+    // Add potential final rests (melody rest or fermata)
+    estimatedMaxTaskDuration = estimatedMaxTaskDuration + maxMelRest + maxFermRest;
+
+    // Add safety buffer
+    estimatedMaxTaskDuration = estimatedMaxTaskDuration + 1.0;
+
+    ["DEBUG: Estimated Max Task Duration:", estimatedMaxTaskDuration].postln;
+    // --- End Max Duration Calculation ---
+
+    // Create an amplitude envelope without a release node, long enough to contain the task
+     env = Env([0, 1, 1, 0], [0.1, estimatedMaxTaskDuration, 0.1], \sin);
 
     // Create the ProcMod for this melody
     ProcMod.new(
-        env,          // Use ASR envelope
+        env,          // Envelope without release node
         1.0,          // Amplitude
         id,           // Unique ID
         nil,          // Group (create new)
@@ -927,7 +989,6 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
             var currentNote = pattern[0];
             var noteIndex = 0;
             var repetitionCount = 0;
-            var effectiveLength = if(~modes.removeLast, {pattern.size - 1}, {pattern.size});
             var notePlaying = false;
             var task;
 
@@ -938,9 +999,9 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 
             // Use MIDI controller values if available
             if(~midiController.notNil) {
-                noteDuration = ~midiController.getSliderValue(1).linlin(0, 127, 0.005, 0.5);
+                noteDuration = ~midiController.getSliderValue(1).linlin(0, 127, 0.001, 0.5);
                 noteRestTime = ~midiController.getSliderValue(2).linlin(0, 127, 0.0001, 0.4);
-                temporalAccent = ~midiController.getSliderValue(5).linlin(0, 127, 1, 8);
+                temporalAccent = ~midiController.getSliderValue(5).linlin(0, 127, 0.75, 8);
                 // Get melody rest time from slider 4
                 ~melodyRestTime = ~midiController.getSliderValue(4).linlin(0, 127, 0.0, 1.0);
             };
@@ -1013,11 +1074,18 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                             };
                         };
 
-                        // Release any previous fermata note
+                        // Release any previous fermata note and bend synths
                         if(~lastFermataNote.notNil) {
                             ["Releasing previous fermata note:", ~lastFermataNote].postln;
                             NetAddr.localAddr.sendMsg('/note/release', ~lastFermataNote);
                             ~lastFermataNote = nil;
+
+                            // Also clear any active bend synths
+                            if(~activeBendSynths.size > 0) {
+                                ["Clearing active bend synths (new note)"].postln;
+                                ~activeBendSynths.do(_.free);
+                                ~activeBendSynths.clear;
+                            };
                         };
 
                         // Play the note with OSC
@@ -1030,9 +1098,41 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                             actualDuration, isFermata.asInteger,
                             isFirstNote.asInteger, isLastNote.asInteger);
 
-                        // Store fermata note for later release
+                        // Store fermata note for later release AND potentially trigger bend
                         if(isFermata) {
                             ~lastFermataNote = processedNote[0];
+
+                            // If bendMode is also on, create bend envelopes
+                            if(~modes.bendMode) {
+                                var fermataHoldDuration = ~melodyRestTime + ~fermataReleaseRest;
+                                var bendPeakTime = fermataHoldDuration * ~bendControl.bendPeakTimeFactor;
+                                var bendReturnTime = fermataHoldDuration * ~bendControl.bendReturnTimeFactor;
+                                var bendValue = ~calcBendValue.(~bendControl.bendPercent);
+
+                                ["Triggering BEND for fermata note:", ~lastFermataNote,
+                                 "Percent:", ~bendControl.bendPercent,
+                                 "Value:", bendValue,
+                                 "Hold Dur:", fermataHoldDuration,
+                                 "Peak Time:", bendPeakTime,
+                                 "Return Time:", bendReturnTime
+                                ].postln;
+
+                                // Create bend synth for each VST
+                                ~vstList.keysValuesDo { |vstKey, vst, i|
+                                    var bendSynth;
+                                    bendSynth = Synth(\BendEnvelope, [
+                                        \start, 8192,
+                                        \peak, bendValue,
+                                        \end, 8192,
+                                        \peakTime, bendPeakTime,
+                                        \returnTime, bendReturnTime,
+                                        \chanIndex, i,
+                                        \peakCurve, ~bendControl.curveShape,
+                                        \returnCurve, ~bendControl.curveShape
+                                    ]);
+                                    ~activeBendSynths[vstKey] = bendSynth;
+                                };
+                            };
                         };
 
                         // Wait before playing the next note
@@ -1042,11 +1142,49 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                         noteIndex = noteIndex + 1;
                     };
 
-                    // Post-pattern logic
-                    if(repIndex < (~repetitions - 1)) {
-                        // Add a brief wait between repetitions
-                        (noteRestTime * 2).wait;
+                    // --- Post-Repetitions Logic ---
+
+                    // Handle fermata release specifically when melodyRestMode is OFF
+                    if(~modes.fermata && (~modes.melodyRestMode.not) && ~lastFermataNote.notNil) {
+                        var holdDuration = ~lastNoteDuration ? 0.1; // Use last note duration or default
+                        var bendDuration = 0;
+
+                        ["Handling fermata release without melody rest. Holding for:", holdDuration].postln;
+
+                        // If bending, calculate bend time to wait
+                        if(~modes.bendMode && ~activeBendSynths.size > 0) {
+                            bendDuration = (holdDuration * ~bendControl.bendPeakTimeFactor) +
+                                           (holdDuration * ~bendControl.bendReturnTimeFactor);
+                            ["Bend active, waiting for bend duration:", bendDuration].postln;
+                            // Wait for the bend envelope to roughly complete
+                            bendDuration.wait;
+                        } {
+                            // Otherwise, just wait for the note's intended hold
+                            holdDuration.wait;
+                        };
+
+                        // Release the note and bend synths AFTER the wait
+                        ["Releasing fermata note after hold (no melody rest):", ~lastFermataNote].postln;
+                        NetAddr.localAddr.sendMsg('/note/release', ~lastFermataNote);
+                        ~lastFermataNote = nil;
+
+                        if(~activeBendSynths.size > 0) {
+                            ["Clearing active bend synths (no melody rest)"].postln;
+                            ~activeBendSynths.do(_.free);
+                            ~activeBendSynths.clear;
+                        };
                     };
+
+                    // Cleanup bend synths if they were created (might happen if fermata is ON but melodyRestMode is OFF)
+                     if(~activeBendSynths.size > 0 && ~lastFermataNote.isNil) { // Only cleanup if note wasn't just released above
+                         ["Clearing active bend synths (end of task, non-melody-rest fermata release)"].postln;
+                         ~activeBendSynths.do(_.free);
+                         ~activeBendSynths.clear;
+                     };
+
+                    // Signal completion
+                    ["Melody", melodyKey, "completed"].postln;
+                    ["**** DEBUG: Melody task complete for", melodyKey, "- exact time:", Main.elapsedTime.round(0.001)].postln;
                 };
 
                 // After all repetitions, handle melody rest if enabled
@@ -1064,6 +1202,13 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
                         ~fermataReleaseRest.wait;
 
                         ~lastFermataNote = nil;
+
+                        // Also clear any active bend synths after rest
+                        if(~activeBendSynths.size > 0) {
+                            ["Clearing active bend synths (after rest)"].postln;
+                            ~activeBendSynths.do(_.free);
+                            ~activeBendSynths.clear;
+                        };
                     };
                 };
 
@@ -1086,6 +1231,13 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 
             // Clean up resources if needed
             ~activeNotes.clear;
+
+            // Release bend synths
+            if(~activeBendSynths.size > 0) {
+                ["Clearing active bend synths (ProcMod release)"].postln;
+                ~activeBendSynths.do(_.free);
+                ~activeBendSynths.clear;
+            };
         },
 
         // onReleaseFunc - executes when release is triggered
@@ -1265,13 +1417,18 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
         ~lastFermataNote = nil;
     };
 
+    // Clear bend synths
+    if(~activeBendSynths.size > 0) {
+        ["Clearing active bend synths (stopAllMelodies)"].postln;
+        ~activeBendSynths.do(_.free);
+        ~activeBendSynths.clear;
+    };
+
     // Reset melody index
     ~currentMelodySetIndex = 0;
 
     // Clear any active notes
     ~activeNotes.clear;
-
-    ["All melodies stopped"].postln;
 };
 
 // Stop all notes regardless of melody state
@@ -1444,6 +1601,20 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
         var proc, isPaused = false, cycleChanged = false;
 
         while({ ~loopingMelody }) {
+            // --- Check for and release previous fermata note ---
+            if(~lastFermataNote.notNil) {
+                ["LoopingMelody: Releasing previous fermata note:", ~lastFermataNote].postln;
+                NetAddr.localAddr.sendMsg('/note/release', ~lastFermataNote);
+                ~lastFermataNote = nil;
+
+                if(~activeBendSynths.size > 0) {
+                    ["LoopingMelody: Clearing active bend synths"].postln;
+                    ~activeBendSynths.do(_.free);
+                    ~activeBendSynths.clear;
+                };
+            };
+            // ---------------------------------------------------
+
             // Check if the cycle has changed
             if(initialCycle != ~currentCycle) {
                 ["Cycle changed from", initialCycle, "to", ~currentCycle,
@@ -1497,7 +1668,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 				// 	~melodyRestTime = ~midiController.getSliderValue(4).linlin(0, 127, 0.0, 1.0);
 				// 	["DEBUG: Using MIDI-controlled noteRest:", currentNoteRest, "melodyRestTime:", ~melodyRestTime].postln;
 				// };
-
+				//
                 // Calculate duration based on current settings
                 if(~lastNoteDuration.notNil) {
                     // If we know the last note's duration, use it for more precise timing
@@ -1576,7 +1747,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 
 // Variables to track the continuous loop sequence
 // ~continuousLoopSequence = [\loop1, \loop2, \loop3, \loop4, \loop5, \loop6, \loop7, \loop8];
-~continuousLoopSequence = [\set1, \set1];
+~continuousLoopSequence = [\loop1, \loop1a];
 ~currentLoopIndex = 0;
 ~currentLoopIteration = 0;
 ~continuousLoopTask = nil;
@@ -1607,6 +1778,20 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 
         // Continue until manually stopped
         while({ ~continuousLoopRunning }) {
+            // --- Check for and release previous fermata note ---
+            if(~lastFermataNote.notNil) {
+                ["ContinuousLoop: Releasing previous fermata note:", ~lastFermataNote].postln;
+                NetAddr.localAddr.sendMsg('/note/release', ~lastFermataNote);
+                ~lastFermataNote = nil;
+
+                if(~activeBendSynths.size > 0) {
+                    ["ContinuousLoop: Clearing active bend synths"].postln;
+                    ~activeBendSynths.do(_.free);
+                    ~activeBendSynths.clear;
+                };
+            };
+            // ---------------------------------------------------
+
             // Check if the cycle has changed FIRST
             if(initialCycle != ~currentCycle) {
                 ["Cycle changed from", initialCycle, "to", ~currentCycle,
@@ -1614,7 +1799,7 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 
                 // Update continuous sequence based on the new cycle
                 ~continuousLoopSequence = ~developmentCycles[~currentCycle].sequence;
-
+				["~developmentCycles[~currentCycle].sequence: ", ~developmentCycles[~currentCycle].sequence].postln;
                 // Reset sequence counters
                 ~currentLoopIndex = 0;
                 ~currentLoopIteration = 0;
@@ -1756,10 +1941,10 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
 ~updateExpressionRangeFromKnobs = {
     if(~midiController.notNil) {
         // Use knob 1 (index 0) for minimum (0-63 range)
-        ~ccControl.expressionMin = ~midiController.getKnobValue(0).linlin(0, 127, 0, 63).asInteger;
+        ~ccControl.expressionMin = ~midiController.getKnobValue(0).linlin(0, 127, 0, 127).asInteger;
 
         // Use knob 2 (index 1) for maximu-m (64-127 range)
-        ~ccControl.expressionMax = ~midiController.getKnobValue(1).linlin(0, 127, 64, 127).asInteger;
+        ~ccControl.expressionMax = ~midiController.getKnobValue(1).linlin(0, 127, 0, 127).asInteger;
 
         // Make sure max is always greater than min
         if(~ccControl.expressionMax <= ~ccControl.expressionMin) {
@@ -1769,5 +1954,13 @@ OSCdef(\releaseFermata, { |msg, time, addr, recvPort|
         ["Expression range updated from knobs: min:", ~ccControl.expressionMin,
          "max:", ~ccControl.expressionMax].postln;
     };
+};
+
+// Function to calculate bend value from percentage
+~calcBendValue = { |percent|
+    var bendRange = 8192; // 14-bit MIDI bend range (0-16383, center at 8192)
+    var bendOffset = (percent / 100 * bendRange).asInteger;
+    var bendValue = 8192 + bendOffset; // Center + offset
+    bendValue.clip(0, 16383); // Ensure within valid range
 };
 

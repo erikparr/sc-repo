@@ -3,10 +3,13 @@
 ~triggerResponder.free;
 // OSC Function for pitch bend with more debugging
 ~oscFunc = OSCFunc({ |msg|
-    var replyID = msg[2];
-    var chanIndex = msg[3].asInteger; // This is the VST index (0, 1, 2...)
-    var bendValue = msg[4].asInteger;
-    var vstKey = (\vsti ++ chanIndex).asSymbol;
+    var replyID, chanIndex, bendValue, vstKey, vstInstance;
+    
+    replyID = msg[2];
+    chanIndex = msg[3].asInteger; // This is the VST index (0, 1, 2...)
+    bendValue = msg[4].asInteger;
+    vstKey = (\vsti ++ chanIndex).asSymbol;
+    vstInstance = ~vstManager.getInstances[vstKey];
 
     // Periodic Logging for /bend OSC
     if(~bendLogCounter.isNil) { ~bendLogCounter = 0 };
@@ -14,15 +17,14 @@
     if((~bendLogCounter % 50 == 1) || (bendValue != 8192) ) { // Log frequently if bend is active
          ["[/bend OSC]: VST Idx:", chanIndex, "BendVal:", bendValue, "VSTKey:", vstKey].postln;
     };
-
-    if(~vstList[vstKey].notNil && (bendValue >= 0) && (bendValue <= 16383)) {
+    if(vstInstance.notNil && (bendValue >= 0) && (bendValue <= 16383)) {
         // Send bend on MIDI Channel 0, not chanIndex
         if((~bendLogCounter % 50 == 1) || (bendValue != 8192) ) {
             [" -> Applying bend to", vstKey, "on MIDI Chan 0"].postln;
         };
-        ~vstList[vstKey].midi.bend(0, bendValue); // Use MIDI channel 0
+        vstInstance.midi.bend(0, bendValue); // Use MIDI channel 0
     } {
-        if(~vstList[vstKey].isNil) {
+        if(vstInstance.isNil) {
             "Error: VST not found for key %".format(vstKey).postln;
         } {
             "Error: Invalid bend value: %".format(bendValue).postln;
@@ -33,15 +35,17 @@
 // Add OSC responder for expression control
 ~expressionFunc.free;
 ~expressionFunc = OSCFunc({ |msg|
-    var replyID = msg[2];
-    var chanIndex = msg[3].asInteger; // This is now the VST index
-    var ccNum = msg[4].asInteger;
-    var exprValue = msg[5].asInteger.clip(0, 127);
-    var vstKey = (\vsti ++ chanIndex).asSymbol;
-
-    if(~vstList[vstKey].notNil) {
+    var replyID, chanIndex, ccNum, exprValue, vstKey, vstInstance;
+    
+    replyID = msg[2];
+    chanIndex = msg[3].asInteger; // This is now the VST index
+    ccNum = msg[4].asInteger;
+    exprValue = msg[5].asInteger.clip(0, 127);
+    vstKey = (\vsti ++ chanIndex).asSymbol;
+    vstInstance = ~vstManager.getInstances[vstKey];
+    if(vstInstance.notNil) {
         // Here we use a fixed MIDI channel (0) regardless of the VST index
-        ~vstList[vstKey].midi.control(0, ccNum, exprValue);
+        vstInstance.midi.control(0, ccNum, exprValue);
 
     if(~logCounter.isNil) { ~logCounter = 0 };
     ~logCounter = ~logCounter + 1;

@@ -38,7 +38,7 @@ AppClock.sched(0, {
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
 			[0, 27, 6],   // bow pressure accent
-			[0, 28, 7]   // bow position
+			// [0, 17, 7]   // bow position
 		],
 		\vsti1: [
 			[0, 16, 0],  // Same mappings for second VST
@@ -48,7 +48,7 @@ AppClock.sched(0, {
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
 			[0, 27, 6],   // bow pressure accent
-			[0, 28, 7]   // bow position
+			// [0, 17, 7]   // bow position
 		],
 		\vsti2: [
 			[0, 16, 0],  // Same mappings for second VST
@@ -58,7 +58,7 @@ AppClock.sched(0, {
 			[0, 25, 4],   // harmonic A gain
 			[0, 26, 5],   // harmonic B gain
 			[0, 27, 6],   // bow pressure accent
-			[0, 28, 7]   // bow position
+			// [0, 17, 7]   // bow position
 		]
 		// \vsti3: [
 		// 	[0, 16, 0],  // Same mappings for second VST
@@ -67,7 +67,7 @@ AppClock.sched(0, {
 		// 	[0, 25, 4],   // harmonic A gain
 		// 	[0, 26, 5],   // harmonic B gain
 		// 	[0, 27, 6],   // bow pressure accent
-		// 	[0, 28, 7]   // bow position
+		// 	[0, 17, 7]   // bow position
 		// ],
 		// \vsti4: [
 		// 	[0, 16, 0],  // Same mappings for second VST
@@ -76,7 +76,7 @@ AppClock.sched(0, {
 		// 	[0, 25, 4],   // harmonic A gain
 		// 	[0, 26, 5],   // harmonic B gain
 		// 	[0, 27, 6],   // bow pressure accent
-		// 	[0, 28, 7]   // bow position
+		// 	[0, 17, 7]   // bow position
 		// ],
 		// \vsti5: [
 		// 	[0, 16, 0],  // Same mappings for second VST
@@ -85,7 +85,7 @@ AppClock.sched(0, {
 		// 	[0, 25, 4],   // harmonic A gain
 		// 	[0, 26, 5],   // harmonic B gain
 		// 	[0, 27, 6],   // bow pressure accent
-		// 	[0, 28, 7]   // bow position
+		// 	[0, 17, 7]   // bow position
 		// ],
 	));
 
